@@ -1,0 +1,29 @@
+{
+    "accountId": 990001,
+    "userId": 990101,
+    "locationGroupId": 990201,
+    "editedBy": 1,
+    "definitions": [
+        {"name": "phpunit_practice_toggle", "attributeType": 1, "isFeature": 2, "overrideLevel": 2},
+        {"name": "phpunit_user_toggle", "attributeType": 1, "isFeature": 2, "overrideLevel": 5},
+        {"name": "phpunit_unset_toggle", "attributeType": 1, "isFeature": 2, "overrideLevel": 2},
+        {"name": "phpunit_dev_toggle", "attributeType": 1, "isFeature": 1, "overrideLevel": 2},
+        {"name": "phpunit_string_config", "attributeType": 3, "isFeature": 0, "overrideLevel": 2},
+        {"name": "phpunit_number_config", "attributeType": 4, "isFeature": 0, "overrideLevel": 2},
+        {"name": "phpunit_json_config", "attributeType": 6, "isFeature": 0, "overrideLevel": 2},
+        {"name": "phpunit_location_group_config", "attributeType": 3, "isFeature": 0, "overrideLevel": 3},
+        {"name": "phpunit_scratch_toggle", "attributeType": 1, "isFeature": 2, "overrideLevel": 2}
+    ],
+    "values": [
+        {"name": "phpunit_practice_toggle", "level": "practice", "value": true},
+        {"name": "phpunit_user_toggle", "level": "practice", "value": false},
+        {"name": "phpunit_user_toggle", "level": "user", "value": true},
+        {"name": "phpunit_dev_toggle", "level": "practice", "value": true},
+        {"name": "phpunit_string_config", "level": "practice", "value": "hello"},
+        {"name": "phpunit_number_config", "level": "practice", "value": 42},
+        {"name": "phpunit_json_config", "level": "practice", "value": {"languages": ["en-US", "es-US"]}},
+        {"name": "phpunit_location_group_config", "level": "practice", "value": "practice-level"},
+        {"name": "phpunit_location_group_config", "level": "location_group", "value": "group-level"}
+    ],
+    "cleared": ["phpunit_scratch_toggle", "phpunit_unset_toggle"]
+}

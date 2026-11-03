@@ -1,0 +1,30 @@
+{
+  "name": "csiq/carestack-configuration",
+  "description": "gRPC client for CareStack Configuration. Depend on IConfigurationClient.",
+  "version": "1.0.0",
+  "require": {
+    "php": "^8.2",
+    "ext-grpc": "*",
+    "grpc/grpc": "^1.57",
+    "google/protobuf": "^4.26 || ^5.0",
+    "psr/log": "^1 || ^2 || ^3"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Csiq\\Configuration\\": "src/",
+      "GPBMetadata\\": "generated/GPBMetadata/",
+      "Carestack\\Configuration\\": "generated/Carestack/Configuration/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Csiq\\Configuration\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit"
+  }
+}

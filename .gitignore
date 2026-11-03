@@ -1,0 +1,8 @@
+/vendor/
+/.phpunit.cache/
+*.log
+.idea/
+.vscode/
+composer.lock
+*csv
+

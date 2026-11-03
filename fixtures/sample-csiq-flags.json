@@ -1,0 +1,23 @@
+{
+  "practices": [
+    {
+      "practice_id": 1,
+      "is_memo_enabled": 1,
+      "is_fax_enabled": 0,
+      "is_holiday_calendar_enabled": 1,
+      "is_call_analytics_v2_enabled": 1,
+      "is_ai_feedback_enabled": 0,
+      "has_outbound_dialer": 0
+    }
+  ],
+  "users": [
+    {
+      "practice_id": 1,
+      "user_id": 10,
+      "is_audio_download_enabled": 1,
+      "ai_limit_banner_visible": 0,
+      "admin_app_version": "2026.10.1",
+      "agent_app_version": "2026.10.1"
+    }
+  ]
+}

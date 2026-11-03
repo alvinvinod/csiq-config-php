@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+option csharp_namespace = "CareStack.Configuration";
+
+package carestack.configuration;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+// Shared Models
+
+message RpcConfigurationCondition {
+    google.protobuf.Int32Value account_id = 1;
+    google.protobuf.Int32Value user_id = 2;
+    google.protobuf.Int32Value location_group_id = 3;
+    google.protobuf.Int32Value location_id = 4;
+    google.protobuf.Int32Value attribute_area = 5;
+    int32 config_definition_scope = 6;
+}
+
+message RpcTypeValuePair {
+    int32 type = 1;
+    google.protobuf.StringValue value = 2; // object serialized to string
+}
+
+message RpcLegacyConfigurationDetails {
+    string name = 1;
+    int32 type = 2;
+    int32 account_configuration_id = 3;
+    RpcTypeValuePair type_value_pair = 4;
+    int32 is_feature = 5;
+    int32 priority = 6;
+    google.protobuf.Int32Value account_id = 7;
+    google.protobuf.Int32Value location_group_id = 8;
+    google.protobuf.Int32Value location_id = 9;
+    google.protobuf.Int32Value user_id = 10;
+}
+
+message RpcConfigurationDetails {
+    string name = 1;
+    int32 type = 2;
+    int32 priority = 3;
+    RpcTypeValuePair type_value_pair = 4;
+    google.protobuf.Int32Value account_id = 5;
+    google.protobuf.Int32Value location_group_id = 6;
+    google.protobuf.Int32Value location_id = 7;
+    google.protobuf.Int32Value user_id = 8;
+}
+
+message RpcToggleConfigurationSet {
+    map<string, bool> toggles = 1;
+    map<string, RpcTypeValuePair> configurations = 2;
+}
+
+// Requests and Responses
+
+message RpcNamedConfiguration {
+    string name = 1;
+    RpcConfigurationCondition condition = 2;
+}
+
+message RpcMultiPriorityNamedConfiguration {
+    repeated int32 priorities = 1;
+    string name = 2;
+    RpcConfigurationCondition condition = 3;
+}
+
+message RpcMultiNamedConfiguration {
+    repeated string names = 1;
+    RpcConfigurationCondition condition = 2;
+}
+
+message RpcToggleValue {
+    bool value = 1;
+}
+
+message RpcLegacyUpsertConfigurationRequest {
+    RpcUpsertConfigurationRequest upsert_request = 1;
+    google.protobuf.Int32Value account_configuration_id = 2;
+}
+
+message RpcUpsertConfigurationRequest {
+    RpcTypeValuePair type_value_pair = 1;
+    int32 edited_by_user_id = 2;
+    RpcNamedConfiguration condition = 3;
+}
+
+message RpcDeleteConfigurationRequest {
+    int32 deleted_by_user_id = 1;
+    RpcNamedConfiguration condition = 2;
+}
+
+message RpcConfigurationDetailsNullable {
+    oneof RpcConfigurationDetail {
+       RpcConfigurationDetails configuration_details = 1;
+    }
+}
+
+message RpcLegacyConfigurationDetailsNullable {
+    
+    oneof RpcLegacyConfigurationDetails {
+        RpcLegacyConfigurationDetails configuration_details = 1;
+    }
+}
+
+message RpcConfigurationDetailsList {
+    repeated RpcConfigurationDetails items = 1;
+}
+
+// Services
+
+service RpcConfigurationService {
+    rpc GetAllTogglesAndConfigurationsByNames (RpcMultiNamedConfiguration) returns (RpcToggleConfigurationSet);
+
+    rpc GetAllTogglesAndConfigurations (RpcConfigurationCondition) returns (RpcToggleConfigurationSet);
+
+    rpc GetConfigurationDetails (RpcNamedConfiguration) returns (RpcConfigurationDetails);
+
+    rpc TryGetConfigurationDetails (RpcNamedConfiguration) returns (RpcConfigurationDetailsNullable);
+    
+    rpc GetLegacyConfigurationDetails (RpcNamedConfiguration) returns (RpcLegacyConfigurationDetailsNullable);
+
+    rpc GetFeatureToggleValue (RpcNamedConfiguration) returns (RpcToggleValue);
+
+    rpc GetDevToggleValue (RpcNamedConfiguration) returns (RpcToggleValue);
+
+    rpc LegacyUpsertConfiguration (RpcLegacyUpsertConfigurationRequest) returns (google.protobuf.Empty);
+
+    rpc UpsertConfiguration (RpcUpsertConfigurationRequest) returns (google.protobuf.Empty);
+
+    rpc DeleteConfiguration (RpcDeleteConfigurationRequest) returns (google.protobuf.Empty);
+
+    rpc GetAllAccountConfigurationByNamesAndPriorities (RpcMultiPriorityNamedConfiguration) returns (RpcConfigurationDetailsList);
+}
