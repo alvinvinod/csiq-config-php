@@ -19,21 +19,36 @@ use Google\Protobuf\GPBEmpty;
 use Grpc\BaseStub;
 use Grpc\ChannelCredentials;
 use Grpc\UnaryCall;
+use InvalidArgumentException;
 
 class RpcConfigurationServiceClient extends BaseStub
 {
     public function __construct(ConfigurationClientConfig $config)
     {
         parent::__construct($config->host, [
-            'credentials' => $config->insecure
-                ? ChannelCredentials::createInsecure()
-                : ChannelCredentials::createSsl(),
+            'credentials' => self::channelCredentials($config),
             // -1 is unlimited (grpc-core). Same as CareStack MaxReceiveMessageSize = null.
             'grpc.max_receive_message_length' => -1,
             'grpc.keepalive_time_ms' => $config->keepaliveTimeMs,
             'grpc.keepalive_timeout_ms' => $config->keepaliveTimeoutMs,
             'grpc.keepalive_permit_without_calls' => 1,
         ]);
+    }
+
+    private static function channelCredentials(ConfigurationClientConfig $config): ChannelCredentials
+    {
+        if ($config->insecure) {
+            return ChannelCredentials::createInsecure();
+        }
+        if ($config->rootCertPath === null || $config->rootCertPath === '') {
+            throw new InvalidArgumentException('rootCertPath is required for TLS');
+        }
+        $pem = @file_get_contents($config->rootCertPath);
+        if ($pem === false) {
+            throw new InvalidArgumentException(sprintf('rootCertPath could not be read (%s)', $config->rootCertPath));
+        }
+
+        return ChannelCredentials::createSsl($pem);
     }
 
     public function GetFeatureToggleValue(RpcNamedConfiguration $argument, array $metadata = [], array $options = []): UnaryCall

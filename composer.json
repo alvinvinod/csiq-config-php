@@ -1,5 +1,5 @@
 {
-  "name": "csiq/carestack-configuration",
+  "name": "csiq/config-php",
   "description": "gRPC client for CareStack Configuration. Depend on IConfigurationClient.",
   "version": "1.0.0",
   "require": {

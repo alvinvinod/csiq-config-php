@@ -1,166 +1,78 @@
-# csiq/carestack-configuration
+# csiq/config-php
 
-PHP gRPC client for CareStack Configuration.
+PHP gRPC client for CareStack Configuration. Depend on `IConfigurationClient`. Create **one client per process** and inject it. App classes must not call the factory.
 
-## Usage
+The service resolves override layers. This client does not. Each public method is one unary RPC. Prefer `getAll($accountId, $names)` over looping `isFeatureEnabled()`.
 
-Type-hint `IConfigurationClient`. Create the live client once at bootstrap (factory, or a DI container) and inject it. `ConfigurationClientFactory::create()` reads `CONFIG_SERVICE_URI` (default `127.0.0.1:8081`). Reuse one client per process. App classes should not call the factory.
+A down service throws `ConfigurationException`. It does not return `false` or a cached flag. There is no client-side cache. `accountId` is CSIQ `practice_id`.
 
-Each public method is one unary RPC. Pick the call that matches how many keys you need. Do not loop `isFeatureEnabled()` for a page of flags.
+Laravel apps: use [`csiq/config-laravel`](../csiq-config-laravel), not `fromEnvironment()`.
 
-**One key.** `isFeatureEnabled`, `isDevToggleEnabled`, `tryGet`, `getConfigurationDetails`.
-
-```php
-$memoOn = $config->isFeatureEnabled('is_memo_enabled', $practiceId);
-$regex = $config->tryGet('dni_regex', $practiceId);
-```
-
-**Several known keys, one RPC.** Pass the names to `getAll()`. That hits `GetAllTogglesAndConfigurationsByNames`. Read the `ToggleSet` in memory for the rest of the request.
-
-```php
-$set = $config->getAll($practiceId, [
-    'is_memo_enabled',
-    'is_fax_enabled',
-    'is_audio_download_enabled',
-    'dni_regex',
-], userId: $userId);
-
-$memoOn = $set->toggles['is_memo_enabled'] ?? false;
-$regex = $set->configurations['dni_regex'] ?? null;
-```
-
-**Every definition for the practice.** `getAll($practiceId)` with an empty name list hits `GetAllTogglesAndConfigurations`. Use this for dumps, admin, or port scripts. It returns flags this app did not create. Prefer the named list on a request path.
-
-Pass `userId` when a user-level value should win over the practice value. Defined toggles with no stored row come back as `false` on `isFeatureEnabled` and in `getAll()` toggle maps. Config names with no value, and unknown names, are omitted from `getAll()`; use `array_key_exists` when "missing" must be distinct from "off".
-
-## Laravel
-
-Require the package from the sibling checkout. The app also needs the `grpc` PHP extension in the same PHP that serves requests. Composer does not install that extension.
-
-```json
-"repositories": [
-    { "type": "path", "url": "../csiq-config-php" }
-]
-```
+## Install
 
 ```bash
-composer require csiq/carestack-configuration
+composer require csiq/config-php
 ```
 
-Put the address in `.env` and read it from config, not from `env()` in the provider. After `config:cache`, `getenv()` inside the package does not see `.env`.
+Needs PHP 8.2+ and **`ext-grpc`**. Composer cannot install the extension.
 
-```
-CONFIG_SERVICE_URI=127.0.0.1:8081
-CONFIG_SERVICE_INSECURE=true
-CONFIG_SERVICE_TIMEOUT_MS=2000
-CONFIG_SERVICE_RETRY_MAX_ATTEMPTS=3
-CONFIG_SERVICE_RETRY_INITIAL_BACKOFF_MS=250
-CONFIG_SERVICE_RETRY_MAX_BACKOFF_MS=250
-CONFIG_SERVICE_RETRY_BACKOFF_MULTIPLIER=1
-CONFIG_SERVICE_KEEPALIVE_TIME_MS=60000
-CONFIG_SERVICE_KEEPALIVE_TIMEOUT_MS=10000
-```
-
-Laravel defaults `timeout_ms` to **2000**. The package itself still defaults to 10000 for CLI (`bin/smoke.php`) and `insecure` to **false**. Local plaintext gRPC needs `CONFIG_SERVICE_INSECURE=true`. Outside `local` and `testing`, boot fails if the URI is loopback (`127.0.0.1`, `localhost`, `::1`) or `insecure` is true.
+## How to use
 
 ```php
-// config/services.php
-'csiq_config' => [
-    'uri' => env('CONFIG_SERVICE_URI', '127.0.0.1:8081'),
-    'insecure' => filter_var(env('CONFIG_SERVICE_INSECURE', false), FILTER_VALIDATE_BOOLEAN),
-    'timeout_ms' => (int) env('CONFIG_SERVICE_TIMEOUT_MS', 2000),
-    'retry_max_attempts' => (int) env('CONFIG_SERVICE_RETRY_MAX_ATTEMPTS', 3),
-    'retry_initial_backoff_ms' => (int) env('CONFIG_SERVICE_RETRY_INITIAL_BACKOFF_MS', 250),
-    'retry_max_backoff_ms' => (int) env('CONFIG_SERVICE_RETRY_MAX_BACKOFF_MS', 250),
-    'retry_backoff_multiplier' => (float) env('CONFIG_SERVICE_RETRY_BACKOFF_MULTIPLIER', 1),
-    'keepalive_time_ms' => (int) env('CONFIG_SERVICE_KEEPALIVE_TIME_MS', 60000),
-    'keepalive_timeout_ms' => (int) env('CONFIG_SERVICE_KEEPALIVE_TIMEOUT_MS', 10000),
-],
-```
-
-```php
-// AppServiceProvider::register()
-use Csiq\Configuration\ConfigurationClientConfig;
 use Csiq\Configuration\ConfigurationClientFactory;
 use Csiq\Configuration\IConfigurationClient;
-use Csiq\Configuration\RetryPolicy;
-use Illuminate\Support\Facades\Log;
-use RuntimeException;
 
-$this->app->singleton(IConfigurationClient::class, function () {
-    $settings = config('services.csiq_config');
-    $host = strtolower(explode(':', (string) preg_replace('#^[a-z]+://#', '', (string) $settings['uri']), 2)[0]);
-    if (
-        ! $this->app->environment(['local', 'testing'])
-        && ($settings['insecure'] || in_array($host, ['127.0.0.1', 'localhost', '::1'], true))
-    ) {
-        throw new RuntimeException(
-            'CONFIG_SERVICE_URI must be a non-local host with CONFIG_SERVICE_INSECURE=false outside local/testing'
-        );
-    }
-
-    return ConfigurationClientFactory::create(
-        new ConfigurationClientConfig(
-            host: $settings['uri'],
-            insecure: $settings['insecure'],
-            timeoutMs: $settings['timeout_ms'],
-            retryPolicy: new RetryPolicy(
-                maxAttempts: $settings['retry_max_attempts'],
-                initialBackoffMs: $settings['retry_initial_backoff_ms'],
-                maxBackoffMs: $settings['retry_max_backoff_ms'],
-                backoffMultiplier: $settings['retry_backoff_multiplier'],
-            ),
-            keepaliveTimeMs: $settings['keepalive_time_ms'],
-            keepaliveTimeoutMs: $settings['keepalive_timeout_ms'],
-        ),
-        Log::getLogger(),
-    );
-});
+$client = ConfigurationClientFactory::create(); // CONFIG_SERVICE_* + TLS PEM
+$memoOn = $client->isFeatureEnabled('is_memo_enabled', $practiceId);
+$set = $client->getAll($practiceId, ['is_memo_enabled', 'dni_regex'], userId: $userId);
 ```
 
-Pass a PSR-3 logger as the second argument to `ConfigurationClientFactory::create()`. Failed attempts log `warning` (will retry) or `error` (give up), with `attempt`, `code`, and `elapsed_ms`. A first-attempt success is silent. A success after retry logs `warning`.
+Pass an explicit `ConfigurationClientConfig` when the process does not expose `.env` to `getenv()` (Laravel `config:cache`). Reuse the client. Do not construct `ConfigurationClient` in a controller.
 
-Inject `IConfigurationClient`. `accountId` is the practice id. Controllers still type-hint the interface. Do not construct `ConfigurationClient` in a controller.
+Optional second argument to `create()`: a PSR-3 logger. Failed attempts log `warning` (will retry) or `error` (give up).
+
+## Supported operations
+
+Optional ids (`userId`, `locationId`, `locationGroupId`, `attributeArea`) narrow the override layer. Omitted ids are not sent. Scope defaults to `ConfigDefinitionScope::SERVER`.
+
+### Reads
+
+| Method | Use when | Missing name / no stored row |
+| --- | --- | --- |
+| `isFeatureEnabled($name, $accountId, …)` | One **feature** toggle | `false`. Off, defined-but-empty, and unknown name are not distinguishable. A config or dev toggle name fails the call. |
+| `isDevToggleEnabled($name, $accountId, …)` | One **dev** toggle | Same as `isFeatureEnabled`: `false`. |
+| `tryGet($name, $accountId, …)` | One value, any type | `null` if the name is not a definition, or a non-toggle config has no value. A feature/dev toggle with no row is `false`, not `null`. |
+| `getConfigurationDetails($name, $accountId, …)` | Winner plus which layer it came from | Throws `ConfigurationException`. Prefer `tryGet` when missing is expected. |
+| `getAll($accountId, $names = [], …)` | Several keys, **one RPC** | Named list → `GetAllTogglesAndConfigurationsByNames`. Empty `$names` → every definition; use for dumps, not a request path. Toggles with no row are `false`. Configs and unknown names are **omitted**. |
+| `getAllAccountConfigurations($name, $accountId, $overrideLevels, …)` | Stored rows at given `OverrideLevel`s, not the winner | A toggle with no stored value is absent here even though `isFeatureEnabled` would be `false`. |
 
 ```php
-use Csiq\Configuration\IConfigurationClient;
-use Csiq\Configuration\ToggleSet;
-
-final class PracticeFeatureFlags
-{
-    public function __construct(private IConfigurationClient $config)
-    {
-    }
-
-    public function forPractice(int $practiceId, ?int $userId = null): ToggleSet
-    {
-        return $this->config->getAll($practiceId, [
-            'is_memo_enabled',
-            'is_fax_enabled',
-            'dni_regex',
-        ], userId: $userId);
-    }
-}
+$set = $client->getAll($practiceId, ['is_memo_enabled', 'dni_regex'], userId: $userId);
+$memoOn = $set->toggles['is_memo_enabled'] ?? false;
+$regex = $set->configurations['dni_regex'] ?? null;
+// missing vs off: array_key_exists('dni_regex', $set->configurations)
 ```
 
-Under PHP-FPM the container is rebuilt each request, but the gRPC extension keeps one channel per worker process.
+### Writes
 
-In tests, replace the interface. No network:
+The definition must already exist. These calls do not create one.
 
-```php
-$this->app->instance(IConfigurationClient::class, $fake);
-```
+| Method | Effect |
+| --- | --- |
+| `upsert($name, $accountId, $value, $editedByUserId, …)` | Insert or replace at that layer. `bool` → boolean, `int` → number, `string` → string, anything else → JSON. A lost response can be retried, so a write may be sent more than once. |
+| `delete($name, $accountId, $deletedByUserId, …)` | Remove the stored value. The definition stays. A later feature/dev toggle read is `false`. |
 
-A missing feature-toggle name and a stored `false` both read as `false` from `isFeatureEnabled()`. `tryGet()` returns `null` only when the name is not a definition, or when a non-toggle config has no stored value.
-
-`culture_id` and other foreign keys stay in the Laravel database. This service holds settings, not relations.
+`isFeatureEnabled` returning `false` is a **successful** RPC. A dead service throws.
 
 ## Environment
 
+Used by `ConfigurationClientConfig::fromEnvironment()` / `ConfigurationClientFactory::create()` with no config.
+
 | Variable | Default |
-|---|---|
+| --- | --- |
 | `CONFIG_SERVICE_URI` | `127.0.0.1:8081` |
 | `CONFIG_SERVICE_INSECURE` | `false` |
+| `CONFIG_SERVICE_ROOT_CERT_PATH` | required for TLS. PEM of the CA (or self-signed server cert). |
 | `CONFIG_SERVICE_TIMEOUT_MS` | `10000` |
 | `CONFIG_SERVICE_RETRY_MAX_ATTEMPTS` | `3` |
 | `CONFIG_SERVICE_RETRY_INITIAL_BACKOFF_MS` | `250` |
@@ -169,66 +81,21 @@ A missing feature-toggle name and a stored `false` both read as `false` from `is
 | `CONFIG_SERVICE_KEEPALIVE_TIME_MS` | `60000` |
 | `CONFIG_SERVICE_KEEPALIVE_TIMEOUT_MS` | `10000` |
 
-Local gRPC is HTTP/2 on **8081**. REST ping stays on **8080**.
+TLS always needs a PEM. This client (`ext-grpc` / C-core `ChannelCredentials::createSsl`) does not use the OS trust store. `insecure=true` is plaintext HTTP/2 and skips the PEM.
 
-### Retries and timeout
+Local `dotnet run` gRPC is HTTPS HTTP/2 on **7154**. Port **5295** is HTTP/1.1 and cannot serve gRPC.
 
-Every call (reads and writes) retries on `INTERNAL`, `UNKNOWN` or `UNAVAILABLE`: 3 attempts, 250ms backoff between them. Sleep is equal jitter (half the backoff plus a random remainder, so 125–250ms at the default). With the default multiplier of 1 the cap stays 250ms. Other status codes fail on the first attempt. There is no circuit breaker; a failed call is retried on the next request. Pass a PSR-3 logger into the factory to record attempts and elapsed time.
+Retries: `INTERNAL`, `UNKNOWN`, `UNAVAILABLE`; 3 attempts; 250ms equal jitter. `TIMEOUT_MS` covers attempts and backoff. There is no circuit breaker (PHP-FPM workers cannot share breaker state).
 
-`CONFIG_SERVICE_TIMEOUT_MS` is a deadline for the whole call, retries and backoff included. Each attempt gets the time that is left, and a retry whose backoff would pass the deadline is not started. A call therefore never blocks the worker longer than the timeout. When it gives up, `ConfigurationException` carries the gRPC status as its code.
-
-### Keepalives
-
-php-grpc cannot dispose a channel the way CareStack recycles `GrpcChannel` every 60s. The client pings instead: `grpc.keepalive_time_ms` (default 60s) and `grpc.keepalive_timeout_ms` (default 10s), with pings allowed on idle channels so FPM workers drop a dead HTTP/2 session without waiting for `pm.max_requests`.
-
-In a framework with cached config (Laravel `config:cache`), `getenv()` does not see `.env`. Build `ConfigurationClientConfig` from your own config there instead of calling `fromEnvironment()`. Pass keepalives and retry settings through that constructor, as in the Laravel snippet above.
-
-## Smoke test
-
-Requires PHP `grpc` extension, a running configuration service, and `CONFIG_SERVICE_INSECURE=true` for local plaintext.
+## Tests and smoke
 
 ```bash
-CONFIG_SERVICE_INSECURE=true php bin/smoke.php
+composer test          # unit; no live service
+php bin/smoke.php      # live HTTPS localhost:7154; exports the ASP.NET cert unless CONFIG_SERVICE_ROOT_CERT_PATH is set
 ```
 
-## Port CSIQ flags and fetch practice vs user
+`SMOKE_PRACTICE_ID`, `SMOKE_FLAG`, `SMOKE_WRITE=true` match the Node smoke.
 
-`practice_configuration_mappings` / `user_configuration_mappings` become definitions named after the column (`is_memo_enabled`) (booleans → feature toggles, other columns → configs). Values are upserted over gRPC. `account_id` is CSIQ `practice_id`; user rows pass `userId:`.
+In tests, bind a fake: `Csiq\Configuration\Testing\FakeConfigurationClient`.
 
-**From** `testData/` **CSVs** (default; dumps of PCM + UCM):
-
-```bash
-export CONFIG_SERVICE_INSECURE=true
-php bin/port-csiq-flags.php
-php bin/fetch-csiq-flags.php --practice-id=75025 --user-id=75015
-php bin/fetch-csiq-flags.php --practice-id=75025 --user-id=75015 --region-id=1
-# defaults to those ids if omitted; --region-id / CSIQ_CONFIG_REGION_ID is passed as locationGroupId on every read
-```
-
-`--practice-id` / `--user-id` filter the dump. `--csv-dir=` overrides `testData/`.
-
-**From a JSON fixture:**
-
-```bash
-export CONFIG_SERVICE_INSECURE=true
-php bin/port-csiq-flags.php --fixture=fixtures/sample-csiq-flags.json
-php bin/fetch-csiq-flags.php --practice-id=1 --user-id=10
-```
-
-**From CSIQ MariaDB:**
-
-```bash
-export CONFIG_SERVICE_INSECURE=true
-export CSIQ_DB_HOST=127.0.0.1 CSIQ_DB_PORT=3306 CSIQ_DB_NAME=laravel CSIQ_DB_USER=<user> CSIQ_DB_PASSWORD=<password>
-export CONFIG_DB_HOST=127.0.0.1 CONFIG_DB_PORT=11053 CONFIG_DB_NAME=Configuration CONFIG_DB_USER=<user> CONFIG_DB_PASSWORD=<password>
-php bin/port-csiq-flags.php --practice-id=1
-php bin/fetch-csiq-flags.php --practice-id=1 --user-id=10
-```
-
-Optional `--region-id=1` (or `CSIQ_CONFIG_REGION_ID`) stores practice flags at the LocationGroup layer. Fetch takes the same flag and passes it as `locationGroupId` on every read. Preview with `--dry-run`. After new definitions, the port script hits `http://127.0.0.1:8080/api/v1/warmup` and fails unless that returns HTTP 200. Existing `ConfigDefinition` rows are left alone; a type or override-level mismatch aborts.
-
-| Variable | Default |
-|---|---|
-| `CSIQ_DB_*` | `127.0.0.1:3306` / `laravel` / `root` / `secret` |
-| `CONFIG_DB_*` | `127.0.0.1:11053` / `Configuration` / `root` / `password` |
-| `CONFIG_WARMUP_URL` | `http://127.0.0.1:8080/api/v1/warmup` |
+Port/fetch scripts (`bin/port-csiq-flags.php`, `bin/fetch-csiq-flags.php`) copy CSIQ DB/CSV flags into CareStack. See those files' headers for flags.

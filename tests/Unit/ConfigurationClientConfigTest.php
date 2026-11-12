@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Csiq\Configuration\Tests\Unit;
 
 use Csiq\Configuration\ConfigurationClientConfig;
+use Csiq\Configuration\ConfigurationClientFactory;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -21,6 +22,7 @@ final class ConfigurationClientConfigTest extends TestCase
         'CONFIG_SERVICE_RETRY_BACKOFF_MULTIPLIER',
         'CONFIG_SERVICE_KEEPALIVE_TIME_MS',
         'CONFIG_SERVICE_KEEPALIVE_TIMEOUT_MS',
+        'CONFIG_SERVICE_ROOT_CERT_PATH',
     ];
 
     /** @var array<string, string|false> */
@@ -43,6 +45,7 @@ final class ConfigurationClientConfigTest extends TestCase
 
     public function testDefaultsWhenNothingIsSet(): void
     {
+        putenv('CONFIG_SERVICE_ROOT_CERT_PATH=/etc/csiq/config-ca.pem');
         $config = ConfigurationClientConfig::fromEnvironment();
 
         self::assertSame('127.0.0.1:8081', $config->host);
@@ -54,6 +57,23 @@ final class ConfigurationClientConfigTest extends TestCase
         self::assertSame(1.0, $config->retryPolicy->backoffMultiplier);
         self::assertSame(60000, $config->keepaliveTimeMs);
         self::assertSame(10000, $config->keepaliveTimeoutMs);
+        self::assertSame('/etc/csiq/config-ca.pem', $config->rootCertPath);
+    }
+
+    public function testTlsRequiresRootCertPath(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('rootCertPath is required for TLS');
+
+        new ConfigurationClientConfig('127.0.0.1:8081');
+    }
+
+    public function testTlsRequiresRootCertPathFromEnvironment(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('rootCertPath is required for TLS');
+
+        ConfigurationClientConfig::fromEnvironment();
     }
 
     public function testEmptyValuesFallBackToDefaults(): void
@@ -61,6 +81,7 @@ final class ConfigurationClientConfigTest extends TestCase
         putenv('CONFIG_SERVICE_TIMEOUT_MS=');
         putenv('CONFIG_SERVICE_RETRY_MAX_ATTEMPTS=');
         putenv('CONFIG_SERVICE_INSECURE=');
+        putenv('CONFIG_SERVICE_ROOT_CERT_PATH=/etc/csiq/config-ca.pem');
 
         $config = ConfigurationClientConfig::fromEnvironment();
 
@@ -80,6 +101,7 @@ final class ConfigurationClientConfigTest extends TestCase
         putenv('CONFIG_SERVICE_RETRY_BACKOFF_MULTIPLIER=1.5');
         putenv('CONFIG_SERVICE_KEEPALIVE_TIME_MS=30000');
         putenv('CONFIG_SERVICE_KEEPALIVE_TIMEOUT_MS=5000');
+        putenv('CONFIG_SERVICE_ROOT_CERT_PATH=/etc/csiq/config-ca.pem');
 
         $config = ConfigurationClientConfig::fromEnvironment();
 
@@ -92,6 +114,7 @@ final class ConfigurationClientConfigTest extends TestCase
         self::assertSame(1.5, $config->retryPolicy->backoffMultiplier);
         self::assertSame(30000, $config->keepaliveTimeMs);
         self::assertSame(5000, $config->keepaliveTimeoutMs);
+        self::assertSame('/etc/csiq/config-ca.pem', $config->rootCertPath);
     }
 
     /** @return iterable<string, array{?string, bool}> */
@@ -110,6 +133,9 @@ final class ConfigurationClientConfigTest extends TestCase
     {
         if ($value !== null) {
             putenv("CONFIG_SERVICE_INSECURE={$value}");
+        }
+        if ($expected === false) {
+            putenv('CONFIG_SERVICE_ROOT_CERT_PATH=/etc/csiq/config-ca.pem');
         }
 
         self::assertSame($expected, ConfigurationClientConfig::fromEnvironment()->insecure);
@@ -140,7 +166,10 @@ final class ConfigurationClientConfigTest extends TestCase
 
     public function testConstructorDefaultsToTls(): void
     {
-        self::assertFalse((new ConfigurationClientConfig('127.0.0.1:8081'))->insecure);
+        $config = new ConfigurationClientConfig('127.0.0.1:8081', rootCertPath: '/etc/csiq/config-ca.pem');
+
+        self::assertFalse($config->insecure);
+        self::assertSame('/etc/csiq/config-ca.pem', $config->rootCertPath);
     }
 
     public function testRejectsTimeoutBelowOneMillisecond(): void
@@ -165,5 +194,16 @@ final class ConfigurationClientConfigTest extends TestCase
         $this->expectExceptionMessage('keepaliveTimeoutMs');
 
         new ConfigurationClientConfig('127.0.0.1:8081', keepaliveTimeoutMs: 0);
+    }
+
+    public function testMissingRootCertPathThrowsWhenOpeningTheChannel(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('rootCertPath');
+
+        ConfigurationClientFactory::create(new ConfigurationClientConfig(
+            'localhost:7154',
+            rootCertPath: '/no/such/csiq-ca.pem',
+        ));
     }
 }

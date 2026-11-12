@@ -12,6 +12,7 @@ final class ConfigurationClientConfig
      * @param int $timeoutMs Deadline for one client call, retries and backoff included.
      * @param int $keepaliveTimeMs HTTP/2 ping interval. Stand-in for CareStack's 60s channel recycle.
      * @param int $keepaliveTimeoutMs How long to wait for a ping ACK before dropping the session.
+     * @param string|null $rootCertPath PEM of the CA (or self-signed server cert). Required when insecure is false.
      */
     public function __construct(
         public readonly string $host,
@@ -20,6 +21,7 @@ final class ConfigurationClientConfig
         public readonly RetryPolicy $retryPolicy = new RetryPolicy(),
         public readonly int $keepaliveTimeMs = 60000,
         public readonly int $keepaliveTimeoutMs = 10000,
+        public readonly ?string $rootCertPath = null,
     ) {
         if ($timeoutMs < 1) {
             throw new InvalidArgumentException('timeoutMs must be at least 1');
@@ -29,6 +31,9 @@ final class ConfigurationClientConfig
         }
         if ($keepaliveTimeoutMs < 1) {
             throw new InvalidArgumentException('keepaliveTimeoutMs must be at least 1');
+        }
+        if (!$insecure && ($rootCertPath === null || $rootCertPath === '')) {
+            throw new InvalidArgumentException('rootCertPath is required for TLS');
         }
     }
 
@@ -49,7 +54,18 @@ final class ConfigurationClientConfig
             ),
             self::intEnv('CONFIG_SERVICE_KEEPALIVE_TIME_MS', 60000),
             self::intEnv('CONFIG_SERVICE_KEEPALIVE_TIMEOUT_MS', 10000),
+            self::stringEnv('CONFIG_SERVICE_ROOT_CERT_PATH'),
         );
+    }
+
+    private static function stringEnv(string $key): ?string
+    {
+        $value = getenv($key);
+        if ($value === false || $value === '') {
+            return null;
+        }
+
+        return $value;
     }
 
     private static function intEnv(string $key, int $default): int

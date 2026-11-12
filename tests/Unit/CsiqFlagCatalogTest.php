@@ -347,6 +347,12 @@ final class CsiqFlagCatalogTest extends TestCase
         CsiqFlagCatalog::assertWarmupSucceeded('http://127.0.0.1/warmup', 'ok', ['HTTP/1.1 200 OK']);
     }
 
+    public function testWarmupAcceptsHttp204(): void
+    {
+        $this->expectNotToPerformAssertions();
+        CsiqFlagCatalog::assertWarmupSucceeded('http://127.0.0.1/api/v1/warmup', '', ['HTTP/1.1 204 No Content']);
+    }
+
     public function testWarmupRejectsAFailedRequest(): void
     {
         $this->expectException(RuntimeException::class);
@@ -355,10 +361,10 @@ final class CsiqFlagCatalogTest extends TestCase
         CsiqFlagCatalog::assertWarmupSucceeded('http://127.0.0.1/warmup', false, null);
     }
 
-    public function testWarmupRejectsANon200Status(): void
+    public function testWarmupRejectsANonSuccessStatus(): void
     {
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Warmup expected HTTP 200 from http://127.0.0.1/warmup, got HTTP/1.1 500 Internal Server Error');
+        $this->expectExceptionMessage('Warmup expected HTTP 200 or 204 from http://127.0.0.1/warmup, got HTTP/1.1 500 Internal Server Error');
 
         CsiqFlagCatalog::assertWarmupSucceeded(
             'http://127.0.0.1/warmup',

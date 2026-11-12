@@ -49,7 +49,7 @@ final class ConfigurationClient implements IConfigurationClient
     ): bool {
         $named = $this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         /** @var RpcToggleValue $response */
-        $response = $this->call(fn (array $options) => $this->rpc->GetFeatureToggleValue($named, [], $options));
+        $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetFeatureToggleValue($named, $metadata, $options));
 
         return $response->getValue();
     }
@@ -66,7 +66,7 @@ final class ConfigurationClient implements IConfigurationClient
     ): bool {
         $named = $this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         /** @var RpcToggleValue $response */
-        $response = $this->call(fn (array $options) => $this->rpc->GetDevToggleValue($named, [], $options));
+        $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetDevToggleValue($named, $metadata, $options));
 
         return $response->getValue();
     }
@@ -83,7 +83,7 @@ final class ConfigurationClient implements IConfigurationClient
     ): mixed {
         $named = $this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         /** @var RpcConfigurationDetailsNullable $response */
-        $response = $this->call(fn (array $options) => $this->rpc->TryGetConfigurationDetails($named, [], $options));
+        $response = $this->call(fn (array $metadata, array $options) => $this->rpc->TryGetConfigurationDetails($named, $metadata, $options));
         if (!$response->hasConfigurationDetails()) {
             return null;
         }
@@ -108,7 +108,7 @@ final class ConfigurationClient implements IConfigurationClient
     ): ConfigurationDetails {
         $named = $this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         /** @var RpcConfigurationDetails|null $response */
-        $response = $this->call(fn (array $options) => $this->rpc->GetConfigurationDetails($named, [], $options));
+        $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetConfigurationDetails($named, $metadata, $options));
         if (!$response instanceof RpcConfigurationDetails) {
             throw new ConfigurationException(sprintf(
                 'Entry not found for %s with provided condition (If this is expected - please use tryGet instead)',
@@ -136,7 +136,7 @@ final class ConfigurationClient implements IConfigurationClient
         $request->setPriorities($overrideLevels);
 
         /** @var RpcConfigurationDetailsList $response */
-        $response = $this->call(fn (array $options) => $this->rpc->GetAllAccountConfigurationByNamesAndPriorities($request, [], $options));
+        $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetAllAccountConfigurationByNamesAndPriorities($request, $metadata, $options));
 
         $details = [];
         foreach ($response->getItems() as $item) {
@@ -159,13 +159,13 @@ final class ConfigurationClient implements IConfigurationClient
         $condition = $this->rpcCondition($accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         if ($names === []) {
             /** @var RpcToggleConfigurationSet $response */
-            $response = $this->call(fn (array $options) => $this->rpc->GetAllTogglesAndConfigurations($condition, [], $options));
+            $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetAllTogglesAndConfigurations($condition, $metadata, $options));
         } else {
             $request = new RpcMultiNamedConfiguration();
             $request->setNames($names);
             $request->setCondition($condition);
             /** @var RpcToggleConfigurationSet $response */
-            $response = $this->call(fn (array $options) => $this->rpc->GetAllTogglesAndConfigurationsByNames($request, [], $options));
+            $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetAllTogglesAndConfigurationsByNames($request, $metadata, $options));
         }
 
         $toggles = [];
@@ -203,7 +203,7 @@ final class ConfigurationClient implements IConfigurationClient
         $request->setEditedByUserId($editedByUserId);
         $request->setCondition($this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
 
-        $this->call(fn (array $options) => $this->rpc->UpsertConfiguration($request, [], $options));
+        $this->call(fn (array $metadata, array $options) => $this->rpc->UpsertConfiguration($request, $metadata, $options));
     }
 
     /** {@inheritdoc} */
@@ -221,7 +221,7 @@ final class ConfigurationClient implements IConfigurationClient
         $request->setDeletedByUserId($deletedByUserId);
         $request->setCondition($this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
 
-        $this->call(fn (array $options) => $this->rpc->DeleteConfiguration($request, [], $options));
+        $this->call(fn (array $metadata, array $options) => $this->rpc->DeleteConfiguration($request, $metadata, $options));
     }
 
     private function named(
@@ -315,7 +315,7 @@ final class ConfigurationClient implements IConfigurationClient
      * call: each attempt gets the time that is left, and no backoff starts that would
      * end past it.
      *
-     * @param callable(array<string, mixed>): UnaryCall $start receives the gRPC call options
+     * @param callable(array<string, list<string>>, array<string, mixed>): UnaryCall $start
      */
     private function call(callable $start): mixed
     {
@@ -323,10 +323,11 @@ final class ConfigurationClient implements IConfigurationClient
         $startedNs = hrtime(true);
         $deadlineNs = $startedNs + $this->config->timeoutMs * 1_000_000;
         $backoffMs = $retry->initialBackoffMs;
+        $metadata = [];
 
         for ($attempt = 1; ; $attempt++) {
             $remainingUs = intdiv($deadlineNs - hrtime(true), 1000);
-            [$response, $status] = $start(['timeout' => max($remainingUs, 1)])->wait();
+            [$response, $status] = $start($metadata, ['timeout' => max($remainingUs, 1)])->wait();
             $code = (int) ($status->code ?? STATUS_OK);
             if ($code === STATUS_OK) {
                 if ($attempt > 1) {

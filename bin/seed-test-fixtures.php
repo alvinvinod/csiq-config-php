@@ -9,11 +9,15 @@ declare(strict_types=1);
  *   php bin/seed-test-fixtures.php
  *   php bin/seed-test-fixtures.php --dry-run
  *
- * Needs CONFIG_DB_* (or docker exec into CONFIG_DB_CONTAINER) and CONFIG_SERVICE_URI.
+ * Needs CONFIG_DB_* (or docker exec into CONFIG_DB_CONTAINER) and a gRPC endpoint.
+ * TLS matches smoke: CONFIG_SERVICE_URI (default localhost:7154), PEM from
+ * CONFIG_SERVICE_ROOT_CERT_PATH or openssl against that host.
+ * Warmup: CONFIG_WARMUP_URL (default http://127.0.0.1:5295/api/v1/warmup).
  */
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
+use Csiq\Configuration\ConfigurationClientConfig;
 use Csiq\Configuration\ConfigurationClientFactory;
 use Csiq\Configuration\CsiqFlagCatalog;
 
@@ -52,10 +56,17 @@ echo 'wrote ' . count($definitions) . " ConfigDefinition rows\n";
 
 if (!isset($opts['skip-warmup'])) {
     CsiqFlagCatalog::warmup();
+    // New SQL rows reach the running process through CDC, not /warmup.
     sleep(2);
 }
 
-$client = ConfigurationClientFactory::create();
+$host = getenv('CONFIG_SERVICE_URI') ?: 'localhost:7154';
+$insecure = in_array(strtolower(trim((string) getenv('CONFIG_SERVICE_INSECURE'))), ['1', 'true', 'yes', 'on'], true);
+$rootCertPath = getenv('CONFIG_SERVICE_ROOT_CERT_PATH') ?: ($insecure ? null : writeServerCert($host));
+$client = ConfigurationClientFactory::create(
+    new ConfigurationClientConfig($host, $insecure, rootCertPath: $rootCertPath),
+);
+
 $accountId = (int) $payload['accountId'];
 $userId = (int) $payload['userId'];
 $locationGroupId = (int) $payload['locationGroupId'];
@@ -86,3 +97,26 @@ foreach ($payload['cleared'] ?? [] as $name) {
 }
 echo "cleared {$cleared} leftover values\n";
 echo "run: CONFIG_SERVICE_INTEGRATION=1 vendor/bin/phpunit --testsuite integration\n";
+
+function writeServerCert(string $target): string
+{
+    $colon = strrpos($target, ':');
+    $hostname = $colon === false ? $target : substr($target, 0, $colon);
+    $port = $colon === false ? '7154' : substr($target, $colon + 1);
+    $connect = $hostname . ':' . $port;
+    $cmd = sprintf(
+        'echo | openssl s_client -connect %s -servername %s -showcerts 2>/dev/null',
+        escapeshellarg($connect),
+        escapeshellarg($hostname),
+    );
+    $output = shell_exec($cmd);
+    if (!is_string($output) || !preg_match('/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/', $output, $pem)) {
+        throw new RuntimeException(
+            "could not read TLS cert from {$target}. For plaintext HTTP/2 set CONFIG_SERVICE_INSECURE=true.",
+        );
+    }
+    $certPath = sys_get_temp_dir() . '/csiq-config-smoke-ca.pem';
+    file_put_contents($certPath, $pem[0] . "\n");
+
+    return $certPath;
+}

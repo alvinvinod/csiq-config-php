@@ -283,7 +283,7 @@ final class CsiqFlagCatalog
 
     public static function warmup(?string $url = null): void
     {
-        $url ??= self::env('CONFIG_WARMUP_URL', 'http://127.0.0.1:8080/api/v1/warmup');
+        $url ??= self::env('CONFIG_WARMUP_URL', 'http://127.0.0.1:5295/api/v1/warmup');
         $ctx = stream_context_create(['http' => ['timeout' => 10, 'ignore_errors' => true]]);
         $body = @file_get_contents($url, false, $ctx);
         self::assertWarmupSucceeded($url, $body, $http_response_header ?? null);
@@ -298,9 +298,10 @@ final class CsiqFlagCatalog
             throw new RuntimeException('Warmup request failed: ' . $url);
         }
         $statusLine = $responseHeaders[0] ?? '';
-        if (preg_match('#^HTTP/\S+\s+200\b#', $statusLine) !== 1) {
+        // Local Kestrel returns 204 No Content. Mapped Docker HTTP may return 200.
+        if (preg_match('#^HTTP/\S+\s+(200|204)\b#', $statusLine) !== 1) {
             throw new RuntimeException(sprintf(
-                'Warmup expected HTTP 200 from %s, got %s',
+                'Warmup expected HTTP 200 or 204 from %s, got %s',
                 $url,
                 $statusLine !== '' ? $statusLine : 'no response',
             ));
