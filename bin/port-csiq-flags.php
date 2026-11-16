@@ -7,10 +7,10 @@ declare(strict_types=1);
  * into CareStack Configuration (definitions in MySQL, values via gRPC upsert).
  *
  * Default: testData/*.csv dumps.
- *   php bin/port-csiq-flags.php [--practice-id=1] [--user-id=00100]
+ *   php bin/port-csiq-flags.php [--tenant-id=1] [--user-id=00100]
  *
  * From CSIQ MariaDB:
- *   php bin/port-csiq-flags.php --from-db [--practice-id=1]
+ *   php bin/port-csiq-flags.php --from-db [--tenant-id=1]
  *
  * From a JSON fixture:
  *   php bin/port-csiq-flags.php --fixture=fixtures/sample-csiq-flags.json
@@ -32,13 +32,13 @@ final class CsiqFlagWriter
     /**
      * @param list<array{name: string, value: mixed}> $flags
      */
-    public function upsertPracticeFlags(int $practiceId, array $flags, int $editedBy, ?int $locationGroupId = null): int
+    public function upsertPracticeFlags(int $casTenantId, array $flags, int $editedBy, ?int $locationGroupId = null): int
     {
         $n = 0;
         foreach ($flags as $flag) {
             $this->config->upsert(
                 $flag['name'],
-                $practiceId,
+                $casTenantId,
                 $flag['value'],
                 $editedBy,
                 locationGroupId: $locationGroupId,
@@ -52,13 +52,13 @@ final class CsiqFlagWriter
     /**
      * @param list<array{name: string, value: mixed}> $flags
      */
-    public function upsertUserFlags(int $practiceId, int $userId, array $flags, int $editedBy): int
+    public function upsertUserFlags(int $casTenantId, int $userId, array $flags, int $editedBy): int
     {
         $n = 0;
         foreach ($flags as $flag) {
             $this->config->upsert(
                 $flag['name'],
-                $practiceId,
+                $casTenantId,
                 $flag['value'],
                 $editedBy,
                 userId: $userId,
@@ -70,11 +70,11 @@ final class CsiqFlagWriter
     }
 }
 
-$opts = getopt('', ['fixture:', 'csv-dir:', 'practice-id:', 'user-id:', 'region-id:', 'from-db', 'dry-run', 'skip-warmup']);
+$opts = getopt('', ['fixture:', 'csv-dir:', 'tenant-id:', 'user-id:', 'region-id:', 'from-db', 'dry-run', 'skip-warmup']);
 $fixture = $opts['fixture'] ?? null;
 $csvDir = $opts['csv-dir'] ?? dirname(__DIR__) . '/testData';
 $fromDb = array_key_exists('from-db', $opts);
-$onlyPractice = isset($opts['practice-id']) ? (int) $opts['practice-id'] : null;
+$onlyTenant = isset($opts['tenant-id']) ? (int) $opts['tenant-id'] : null;
 $onlyUser = isset($opts['user-id']) ? (int) $opts['user-id'] : null;
 $regionId = isset($opts['region-id'])
     ? (int) $opts['region-id']
@@ -103,9 +103,9 @@ if ($fixture !== null) {
     $userTypes = CsiqFlagCatalog::columnTypes($csiq, 'user_configuration_mappings');
     $practiceSql = 'SELECT * FROM practice_configuration_mappings';
     $practiceParams = [];
-    if ($onlyPractice !== null) {
-        $practiceSql .= ' WHERE practice_id = ?';
-        $practiceParams[] = $onlyPractice;
+    if ($onlyTenant !== null) {
+        $practiceSql .= ' WHERE cas_tenant_id = ?';
+        $practiceParams[] = $onlyTenant;
     }
     $stmt = $csiq->prepare($practiceSql);
     $stmt->execute($practiceParams);
@@ -114,9 +114,9 @@ if ($fixture !== null) {
     $userSql = 'SELECT * FROM user_configuration_mappings';
     $userParams = [];
     $userWhere = [];
-    if ($onlyPractice !== null) {
-        $userWhere[] = 'practice_id = ?';
-        $userParams[] = $onlyPractice;
+    if ($onlyTenant !== null) {
+        $userWhere[] = 'cas_tenant_id = ?';
+        $userParams[] = $onlyTenant;
     }
     if ($onlyUser !== null) {
         $userWhere[] = 'user_id = ?';
@@ -130,14 +130,14 @@ if ($fixture !== null) {
     $userRows = $stmt->fetchAll();
 }
 
-if ($onlyPractice !== null) {
+if ($onlyTenant !== null) {
     $practiceRows = array_values(array_filter(
         $practiceRows,
-        static fn (array $row): bool => (int) ($row['practice_id'] ?? 0) === $onlyPractice,
+        static fn (array $row): bool => (int) ($row['cas_tenant_id'] ?? 0) === $onlyTenant,
     ));
     $userRows = array_values(array_filter(
         $userRows,
-        static fn (array $row): bool => (int) ($row['practice_id'] ?? 0) === $onlyPractice,
+        static fn (array $row): bool => (int) ($row['cas_tenant_id'] ?? 0) === $onlyTenant,
     ));
 }
 if ($onlyUser !== null) {
@@ -150,12 +150,12 @@ if ($onlyUser !== null) {
 $definitions = [];
 $practiceFlags = [];
 foreach ($practiceRows as $row) {
-    $practiceId = (int) ($row['practice_id'] ?? 0);
-    if ($practiceId < 1) {
+    $casTenantId = (int) ($row['cas_tenant_id'] ?? 0);
+    if ($casTenantId < 1) {
         continue;
     }
     $flags = CsiqFlagCatalog::describeRow($row, $practiceLevel, $practiceTypes);
-    $practiceFlags[$practiceId] = $flags;
+    $practiceFlags[$casTenantId] = $flags;
     foreach ($flags as $flag) {
         $definitions[$flag['name']] = $flag;
     }
@@ -163,13 +163,13 @@ foreach ($practiceRows as $row) {
 
 $userFlags = [];
 foreach ($userRows as $row) {
-    $practiceId = (int) ($row['practice_id'] ?? 0);
+    $casTenantId = (int) ($row['cas_tenant_id'] ?? 0);
     $userId = (int) ($row['user_id'] ?? 0);
-    if ($practiceId < 1 || $userId < 1) {
+    if ($casTenantId < 1 || $userId < 1) {
         continue;
     }
     $flags = CsiqFlagCatalog::describeRow($row, OverrideLevel::USER, $userTypes);
-    $userFlags[] = ['practice_id' => $practiceId, 'user_id' => $userId, 'flags' => $flags];
+    $userFlags[] = ['cas_tenant_id' => $casTenantId, 'user_id' => $userId, 'flags' => $flags];
     foreach ($flags as $flag) {
         $definitions[$flag['name']] = $flag;
     }
@@ -212,11 +212,11 @@ if (!$skipWarmup) {
 
 $writer = new CsiqFlagWriter(ConfigurationClientFactory::create());
 $upserts = 0;
-foreach ($practiceFlags as $practiceId => $flags) {
-    $upserts += $writer->upsertPracticeFlags($practiceId, $flags, 1, $regionId);
+foreach ($practiceFlags as $casTenantId => $flags) {
+    $upserts += $writer->upsertPracticeFlags($casTenantId, $flags, 1, $regionId);
 }
 foreach ($userFlags as $entry) {
-    $upserts += $writer->upsertUserFlags($entry['practice_id'], $entry['user_id'], $entry['flags'], $entry['user_id']);
+    $upserts += $writer->upsertUserFlags($entry['cas_tenant_id'], $entry['user_id'], $entry['flags'], $entry['user_id']);
 }
 echo "upserted {$upserts} values via gRPC\n";
-echo "fetch with: php bin/fetch-csiq-flags.php --practice-id=<id> --user-id=<id>\n";
+echo "fetch with: php bin/fetch-csiq-flags.php --tenant-id=<id> --user-id=<id>\n";

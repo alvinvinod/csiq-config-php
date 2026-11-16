@@ -14,7 +14,7 @@ declare(strict_types=1);
  * Plaintext HTTP/2 (mapped 8081):
  *   CONFIG_SERVICE_URI=127.0.0.1:8081 CONFIG_SERVICE_INSECURE=true php bin/smoke.php
  *
- * Optional: SMOKE_PRACTICE_ID (10001), SMOKE_FLAG (first toggle from getAll, else EnableFoo),
+ * Optional: SMOKE_TENANT_ID (10001), SMOKE_FLAG (first toggle from getAll, else EnableFoo),
  * SMOKE_WRITE=true to flip and restore a feature toggle.
  * CONFIG_SERVICE_ROOT_CERT_PATH overrides the exported ASP.NET HTTPS cert.
  */
@@ -33,9 +33,9 @@ final class ConfigurationSmoke
     {
     }
 
-    public function run(int $practiceId, bool $write): int
+    public function run(int $casTenantId, bool $write): int
     {
-        $dump = $this->config->getAll($practiceId);
+        $dump = $this->config->getAll($casTenantId);
         $toggleNames = array_keys($dump->toggles);
         $configNames = array_keys($dump->configurations);
         echo sprintf('getAll(): %d toggles, %d configurations', count($toggleNames), count($configNames)) . PHP_EOL;
@@ -47,27 +47,27 @@ final class ConfigurationSmoke
         $flag = getenv('SMOKE_FLAG') ?: ($toggleNames[0] ?? 'EnableFoo');
         echo 'flag: ' . $flag . PHP_EOL;
 
-        $named = $this->config->getAll($practiceId, [$flag]);
+        $named = $this->config->getAll($casTenantId, [$flag]);
         echo sprintf(
             'getAll(names): toggle=%s config=%s',
             show($named->toggles[$flag] ?? null),
             array_key_exists($flag, $named->configurations) ? show($named->configurations[$flag]) : '(omitted)',
         ) . PHP_EOL;
 
-        $enabled = $this->config->isFeatureEnabled($flag, $practiceId);
+        $enabled = $this->config->isFeatureEnabled($flag, $casTenantId);
         echo 'isFeatureEnabled(): ' . show($enabled) . PHP_EOL;
 
         try {
-            $dev = $this->config->isDevToggleEnabled($flag, $practiceId);
+            $dev = $this->config->isDevToggleEnabled($flag, $casTenantId);
             echo 'isDevToggleEnabled(): ' . show($dev) . PHP_EOL;
         } catch (ConfigurationException $err) {
             echo sprintf('isDevToggleEnabled(): %s (code=%d)', $err->getMessage(), $err->getCode()) . PHP_EOL;
         }
 
-        echo 'tryGet(): ' . show($this->config->tryGet($flag, $practiceId)) . PHP_EOL;
+        echo 'tryGet(): ' . show($this->config->tryGet($flag, $casTenantId)) . PHP_EOL;
 
         try {
-            $details = $this->config->getConfigurationDetails($flag, $practiceId);
+            $details = $this->config->getConfigurationDetails($flag, $casTenantId);
             echo sprintf(
                 'getConfigurationDetails(): name=%s value=%s priority=%d type=%d accountId=%s',
                 $details->name,
@@ -80,7 +80,7 @@ final class ConfigurationSmoke
             echo sprintf('getConfigurationDetails(): throws code=%d %s', $err->getCode(), $err->getMessage()) . PHP_EOL;
         }
 
-        $rows = $this->config->getAllAccountConfigurations($flag, $practiceId, [
+        $rows = $this->config->getAllAccountConfigurations($flag, $casTenantId, [
             OverrideLevel::PRACTICE,
             OverrideLevel::VOICESTACK,
         ]);
@@ -96,7 +96,7 @@ final class ConfigurationSmoke
         }
 
         try {
-            $this->config->getConfigurationDetails('DoesNotExist_csiq_php_smoke', $practiceId);
+            $this->config->getConfigurationDetails('DoesNotExist_csiq_php_smoke', $casTenantId);
             fwrite(STDERR, "missing name should have thrown\n");
 
             return 1;
@@ -105,10 +105,10 @@ final class ConfigurationSmoke
         }
 
         if ($write) {
-            $this->config->upsert($flag, $practiceId, !$enabled, 1);
-            echo 'after upsert: ' . show($this->config->isFeatureEnabled($flag, $practiceId)) . PHP_EOL;
-            $this->config->upsert($flag, $practiceId, $enabled, 1);
-            echo 'restored: ' . show($this->config->isFeatureEnabled($flag, $practiceId)) . PHP_EOL;
+            $this->config->upsert($flag, $casTenantId, !$enabled, 1);
+            echo 'after upsert: ' . show($this->config->isFeatureEnabled($flag, $casTenantId)) . PHP_EOL;
+            $this->config->upsert($flag, $casTenantId, $enabled, 1);
+            echo 'restored: ' . show($this->config->isFeatureEnabled($flag, $casTenantId)) . PHP_EOL;
         }
 
         return 0;
@@ -172,14 +172,14 @@ function show(mixed $value): string
 $host = getenv('CONFIG_SERVICE_URI') ?: 'localhost:7154';
 $insecure = truthy(getenv('CONFIG_SERVICE_INSECURE'));
 $rootCertPath = getenv('CONFIG_SERVICE_ROOT_CERT_PATH') ?: ($insecure ? null : writeServerCert($host));
-$practiceId = intEnv('SMOKE_PRACTICE_ID', 10001);
+$casTenantId = intEnv('SMOKE_TENANT_ID', 10001);
 $write = truthy(getenv('SMOKE_WRITE'));
 
 echo sprintf(
-    'smoke: %s insecure=%s practiceId=%d%s',
+    'smoke: %s insecure=%s casTenantId=%d%s',
     $host,
     $insecure ? 'true' : 'false',
-    $practiceId,
+    $casTenantId,
     $rootCertPath ? " rootCertPath={$rootCertPath}" : '',
 ) . PHP_EOL;
 
@@ -192,7 +192,7 @@ $client = ConfigurationClientFactory::create(
 );
 
 try {
-    exit((new ConfigurationSmoke($client))->run($practiceId, $write));
+    exit((new ConfigurationSmoke($client))->run($casTenantId, $write));
 } catch (ConfigurationException $err) {
     fwrite(STDERR, sprintf("gRPC %d: %s\n", $err->getCode(), $err->getMessage()));
     exit(1);

@@ -7,7 +7,7 @@ namespace Csiq\Configuration;
 /**
  * Read and write CareStack configuration over gRPC.
  *
- * Every method takes an account id. In CSIQ that is practice_id. Optional ids
+ * Every method takes a CAS tenant id. Optional ids
  * narrow the override layer the service resolves: user, location, location group,
  * attribute area. Omitted ids are not sent. Scope defaults to ConfigDefinitionScope::SERVER.
  *
@@ -27,7 +27,7 @@ interface IConfigurationClient
      */
     public function isFeatureEnabled(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -42,7 +42,7 @@ interface IConfigurationClient
      */
     public function isDevToggleEnabled(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -61,7 +61,7 @@ interface IConfigurationClient
      */
     public function tryGet(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -78,7 +78,7 @@ interface IConfigurationClient
      */
     public function getConfigurationDetails(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -98,7 +98,7 @@ interface IConfigurationClient
      */
     public function getAllAccountConfigurations(
         string $name,
-        int $accountId,
+        int $casTenantId,
         array $overrideLevels,
         ?int $userId = null,
         ?int $locationId = null,
@@ -119,7 +119,7 @@ interface IConfigurationClient
      * @param list<string> $names
      */
     public function getAll(
-        int $accountId,
+        int $casTenantId,
         array $names = [],
         ?int $userId = null,
         ?int $locationId = null,
@@ -137,7 +137,7 @@ interface IConfigurationClient
      */
     public function upsert(
         string $name,
-        int $accountId,
+        int $casTenantId,
         mixed $value,
         int $editedByUserId,
         ?int $userId = null,
@@ -155,7 +155,7 @@ interface IConfigurationClient
      */
     public function delete(
         string $name,
-        int $accountId,
+        int $casTenantId,
         int $deletedByUserId,
         ?int $userId = null,
         ?int $locationId = null,

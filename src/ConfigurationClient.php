@@ -40,14 +40,14 @@ final class ConfigurationClient implements IConfigurationClient
     /** {@inheritdoc} */
     public function isFeatureEnabled(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
         ?int $attributeArea = null,
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): bool {
-        $named = $this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
+        $named = $this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         /** @var RpcToggleValue $response */
         $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetFeatureToggleValue($named, $metadata, $options));
 
@@ -57,14 +57,14 @@ final class ConfigurationClient implements IConfigurationClient
     /** {@inheritdoc} */
     public function isDevToggleEnabled(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
         ?int $attributeArea = null,
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): bool {
-        $named = $this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
+        $named = $this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         /** @var RpcToggleValue $response */
         $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetDevToggleValue($named, $metadata, $options));
 
@@ -74,14 +74,14 @@ final class ConfigurationClient implements IConfigurationClient
     /** {@inheritdoc} */
     public function tryGet(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
         ?int $attributeArea = null,
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): mixed {
-        $named = $this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
+        $named = $this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         /** @var RpcConfigurationDetailsNullable $response */
         $response = $this->call(fn (array $metadata, array $options) => $this->rpc->TryGetConfigurationDetails($named, $metadata, $options));
         if (!$response->hasConfigurationDetails()) {
@@ -99,14 +99,14 @@ final class ConfigurationClient implements IConfigurationClient
     /** {@inheritdoc} */
     public function getConfigurationDetails(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
         ?int $attributeArea = null,
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): ConfigurationDetails {
-        $named = $this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
+        $named = $this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         /** @var RpcConfigurationDetails|null $response */
         $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetConfigurationDetails($named, $metadata, $options));
         if (!$response instanceof RpcConfigurationDetails) {
@@ -122,7 +122,7 @@ final class ConfigurationClient implements IConfigurationClient
     /** {@inheritdoc} */
     public function getAllAccountConfigurations(
         string $name,
-        int $accountId,
+        int $casTenantId,
         array $overrideLevels,
         ?int $userId = null,
         ?int $locationId = null,
@@ -132,7 +132,7 @@ final class ConfigurationClient implements IConfigurationClient
     ): array {
         $request = new RpcMultiPriorityNamedConfiguration();
         $request->setName($name);
-        $request->setCondition($this->rpcCondition($accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
+        $request->setCondition($this->rpcCondition($casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
         $request->setPriorities($overrideLevels);
 
         /** @var RpcConfigurationDetailsList $response */
@@ -148,7 +148,7 @@ final class ConfigurationClient implements IConfigurationClient
 
     /** {@inheritdoc} */
     public function getAll(
-        int $accountId,
+        int $casTenantId,
         array $names = [],
         ?int $userId = null,
         ?int $locationId = null,
@@ -156,7 +156,7 @@ final class ConfigurationClient implements IConfigurationClient
         ?int $attributeArea = null,
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): ToggleSet {
-        $condition = $this->rpcCondition($accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
+        $condition = $this->rpcCondition($casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
         if ($names === []) {
             /** @var RpcToggleConfigurationSet $response */
             $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetAllTogglesAndConfigurations($condition, $metadata, $options));
@@ -184,7 +184,7 @@ final class ConfigurationClient implements IConfigurationClient
     /** {@inheritdoc} */
     public function upsert(
         string $name,
-        int $accountId,
+        int $casTenantId,
         mixed $value,
         int $editedByUserId,
         ?int $userId = null,
@@ -201,7 +201,7 @@ final class ConfigurationClient implements IConfigurationClient
         $request = new RpcUpsertConfigurationRequest();
         $request->setTypeValuePair($pair);
         $request->setEditedByUserId($editedByUserId);
-        $request->setCondition($this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
+        $request->setCondition($this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
 
         $this->call(fn (array $metadata, array $options) => $this->rpc->UpsertConfiguration($request, $metadata, $options));
     }
@@ -209,7 +209,7 @@ final class ConfigurationClient implements IConfigurationClient
     /** {@inheritdoc} */
     public function delete(
         string $name,
-        int $accountId,
+        int $casTenantId,
         int $deletedByUserId,
         ?int $userId = null,
         ?int $locationId = null,
@@ -219,14 +219,14 @@ final class ConfigurationClient implements IConfigurationClient
     ): void {
         $request = new RpcDeleteConfigurationRequest();
         $request->setDeletedByUserId($deletedByUserId);
-        $request->setCondition($this->named($name, $accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
+        $request->setCondition($this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
 
         $this->call(fn (array $metadata, array $options) => $this->rpc->DeleteConfiguration($request, $metadata, $options));
     }
 
     private function named(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -235,13 +235,13 @@ final class ConfigurationClient implements IConfigurationClient
     ): RpcNamedConfiguration {
         $named = new RpcNamedConfiguration();
         $named->setName($name);
-        $named->setCondition($this->rpcCondition($accountId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
+        $named->setCondition($this->rpcCondition($casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
 
         return $named;
     }
 
     private function rpcCondition(
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -249,7 +249,7 @@ final class ConfigurationClient implements IConfigurationClient
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): RpcConfigurationCondition {
         $condition = new RpcConfigurationCondition();
-        $condition->setAccountIdUnwrapped($accountId);
+        $condition->setAccountIdUnwrapped($casTenantId);
         $condition->setConfigDefinitionScope($configDefinitionScope);
         if ($userId !== null) {
             $condition->setUserIdUnwrapped($userId);

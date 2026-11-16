@@ -32,7 +32,7 @@ final class FakeConfigurationClient implements IConfigurationClient
 
     public function isFeatureEnabled(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -46,19 +46,19 @@ final class FakeConfigurationClient implements IConfigurationClient
 
     public function isDevToggleEnabled(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
         ?int $attributeArea = null,
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): bool {
-        return $this->isFeatureEnabled($name, $accountId);
+        return $this->isFeatureEnabled($name, $casTenantId);
     }
 
     public function tryGet(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -72,7 +72,7 @@ final class FakeConfigurationClient implements IConfigurationClient
 
     public function getConfigurationDetails(
         string $name,
-        int $accountId,
+        int $casTenantId,
         ?int $userId = null,
         ?int $locationId = null,
         ?int $locationGroupId = null,
@@ -83,12 +83,12 @@ final class FakeConfigurationClient implements IConfigurationClient
             throw new ConfigurationException("Entry not found for {$name}");
         }
 
-        return new ConfigurationDetails($name, 0, 0, $this->tryGet($name, $accountId), $accountId);
+        return new ConfigurationDetails($name, 0, 0, $this->tryGet($name, $casTenantId), $casTenantId);
     }
 
     public function getAllAccountConfigurations(
         string $name,
-        int $accountId,
+        int $casTenantId,
         array $overrideLevels,
         ?int $userId = null,
         ?int $locationId = null,
@@ -102,7 +102,7 @@ final class FakeConfigurationClient implements IConfigurationClient
     }
 
     public function getAll(
-        int $accountId,
+        int $casTenantId,
         array $names = [],
         ?int $userId = null,
         ?int $locationId = null,
@@ -118,7 +118,7 @@ final class FakeConfigurationClient implements IConfigurationClient
 
     public function upsert(
         string $name,
-        int $accountId,
+        int $casTenantId,
         mixed $value,
         int $editedByUserId,
         ?int $userId = null,
@@ -137,7 +137,7 @@ final class FakeConfigurationClient implements IConfigurationClient
 
     public function delete(
         string $name,
-        int $accountId,
+        int $casTenantId,
         int $deletedByUserId,
         ?int $userId = null,
         ?int $locationId = null,
