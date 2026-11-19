@@ -29,7 +29,7 @@ final class ConfigurationClientIntegrationTest extends TestCase
     /** @var array<string, mixed> */
     private array $fixture;
 
-    private int $accountId;
+    private int $casTenantId;
 
     private int $userId;
 
@@ -47,7 +47,7 @@ final class ConfigurationClientIntegrationTest extends TestCase
             512,
             JSON_THROW_ON_ERROR,
         );
-        $this->accountId = (int) $this->fixture['accountId'];
+        $this->casTenantId = (int) $this->fixture['accountId'];
         $this->userId = (int) $this->fixture['userId'];
         $this->locationGroupId = (int) $this->fixture['locationGroupId'];
         $this->client = ConfigurationClientFactory::create();
@@ -55,24 +55,24 @@ final class ConfigurationClientIntegrationTest extends TestCase
 
     public function testPracticeToggleIsOn(): void
     {
-        self::assertTrue($this->client->isFeatureEnabled('phpunit_practice_toggle', $this->accountId));
+        self::assertTrue($this->client->isFeatureEnabled('phpunit_practice_toggle', $this->casTenantId));
     }
 
     public function testUserToggleOverridesPracticeWhenUserIdIsPassed(): void
     {
-        self::assertFalse($this->client->isFeatureEnabled('phpunit_user_toggle', $this->accountId));
-        self::assertTrue($this->client->isFeatureEnabled('phpunit_user_toggle', $this->accountId, userId: $this->userId));
+        self::assertFalse($this->client->isFeatureEnabled('phpunit_user_toggle', $this->casTenantId));
+        self::assertTrue($this->client->isFeatureEnabled('phpunit_user_toggle', $this->casTenantId, userId: $this->userId));
     }
 
     public function testDefinedToggleWithNoStoredValueReadsAsFalse(): void
     {
         // GetConfigurationAsync synthesizes false for a toggle definition that has no row.
         // getAllAccountConfigurations does not; it only returns stored rows.
-        self::assertFalse($this->client->isFeatureEnabled('phpunit_unset_toggle', $this->accountId));
-        self::assertFalse($this->client->tryGet('phpunit_unset_toggle', $this->accountId));
+        self::assertFalse($this->client->isFeatureEnabled('phpunit_unset_toggle', $this->casTenantId));
+        self::assertFalse($this->client->tryGet('phpunit_unset_toggle', $this->casTenantId));
         self::assertSame(
             [],
-            $this->client->getAllAccountConfigurations('phpunit_unset_toggle', $this->accountId, [OverrideLevel::PRACTICE]),
+            $this->client->getAllAccountConfigurations('phpunit_unset_toggle', $this->casTenantId, [OverrideLevel::PRACTICE]),
         );
     }
 
@@ -80,10 +80,10 @@ final class ConfigurationClientIntegrationTest extends TestCase
     {
         $name = 'phpunit_missing_key_zzz';
 
-        self::assertFalse($this->client->isFeatureEnabled($name, $this->accountId));
-        self::assertNull($this->client->tryGet($name, $this->accountId));
+        self::assertFalse($this->client->isFeatureEnabled($name, $this->casTenantId));
+        self::assertNull($this->client->tryGet($name, $this->casTenantId));
 
-        $set = $this->client->getAll($this->accountId, [$name]);
+        $set = $this->client->getAll($this->casTenantId, [$name]);
         self::assertArrayNotHasKey($name, $set->toggles);
         self::assertArrayNotHasKey($name, $set->configurations);
     }
@@ -103,7 +103,7 @@ final class ConfigurationClientIntegrationTest extends TestCase
         ));
 
         try {
-            $client->getConfigurationDetails('phpunit_missing_key_zzz', $this->accountId);
+            $client->getConfigurationDetails('phpunit_missing_key_zzz', $this->casTenantId);
             self::fail('Expected ConfigurationException');
         } catch (ConfigurationException $e) {
             self::assertSame(STATUS_UNKNOWN, $e->getCode());
@@ -113,31 +113,31 @@ final class ConfigurationClientIntegrationTest extends TestCase
 
     public function testDevToggle(): void
     {
-        self::assertTrue($this->client->isDevToggleEnabled('phpunit_dev_toggle', $this->accountId));
+        self::assertTrue($this->client->isDevToggleEnabled('phpunit_dev_toggle', $this->casTenantId));
     }
 
     public function testTypedConfigsComeBackDecoded(): void
     {
-        self::assertSame('hello', $this->client->tryGet('phpunit_string_config', $this->accountId));
-        self::assertSame(42, $this->client->tryGet('phpunit_number_config', $this->accountId));
+        self::assertSame('hello', $this->client->tryGet('phpunit_string_config', $this->casTenantId));
+        self::assertSame(42, $this->client->tryGet('phpunit_number_config', $this->casTenantId));
         self::assertSame(
             ['languages' => ['en-US', 'es-US']],
-            $this->client->tryGet('phpunit_json_config', $this->accountId),
+            $this->client->tryGet('phpunit_json_config', $this->casTenantId),
         );
     }
 
     public function testLocationGroupValueWinsWhenLocationGroupIdIsPassed(): void
     {
-        self::assertSame('practice-level', $this->client->tryGet('phpunit_location_group_config', $this->accountId));
+        self::assertSame('practice-level', $this->client->tryGet('phpunit_location_group_config', $this->casTenantId));
         self::assertSame(
             'group-level',
-            $this->client->tryGet('phpunit_location_group_config', $this->accountId, locationGroupId: $this->locationGroupId),
+            $this->client->tryGet('phpunit_location_group_config', $this->casTenantId, locationGroupId: $this->locationGroupId),
         );
     }
 
     public function testGetAllByNamesReturnsTheSeededSet(): void
     {
-        $set = $this->client->getAll($this->accountId, [
+        $set = $this->client->getAll($this->casTenantId, [
             'phpunit_practice_toggle',
             'phpunit_string_config',
             'phpunit_number_config',
@@ -152,7 +152,7 @@ final class ConfigurationClientIntegrationTest extends TestCase
     {
         $rows = $this->client->getAllAccountConfigurations(
             'phpunit_user_toggle',
-            $this->accountId,
+            $this->casTenantId,
             [OverrideLevel::PRACTICE, OverrideLevel::USER],
             userId: $this->userId,
         );
@@ -170,16 +170,16 @@ final class ConfigurationClientIntegrationTest extends TestCase
         $name = 'phpunit_scratch_toggle';
         $editedBy = (int) $this->fixture['editedBy'];
 
-        $this->client->upsert($name, $this->accountId, true, $editedBy);
-        self::assertTrue($this->client->isFeatureEnabled($name, $this->accountId));
+        $this->client->upsert($name, $this->casTenantId, true, $editedBy);
+        self::assertTrue($this->client->isFeatureEnabled($name, $this->casTenantId));
 
-        $this->client->upsert($name, $this->accountId, false, $editedBy);
-        self::assertFalse($this->client->isFeatureEnabled($name, $this->accountId));
+        $this->client->upsert($name, $this->casTenantId, false, $editedBy);
+        self::assertFalse($this->client->isFeatureEnabled($name, $this->casTenantId));
 
-        $this->client->delete($name, $this->accountId, $editedBy);
+        $this->client->delete($name, $this->casTenantId, $editedBy);
         // The definition remains, so the missing row is the toggle default again.
-        self::assertFalse($this->client->isFeatureEnabled($name, $this->accountId));
-        self::assertFalse($this->client->tryGet($name, $this->accountId));
+        self::assertFalse($this->client->isFeatureEnabled($name, $this->casTenantId));
+        self::assertFalse($this->client->tryGet($name, $this->casTenantId));
     }
 
     /**
@@ -198,7 +198,7 @@ final class ConfigurationClientIntegrationTest extends TestCase
         ));
 
         try {
-            $client->isFeatureEnabled('phpunit_string_config', $this->accountId);
+            $client->isFeatureEnabled('phpunit_string_config', $this->casTenantId);
             self::fail('Expected ConfigurationException');
         } catch (ConfigurationException $e) {
             self::assertSame(STATUS_UNKNOWN, $e->getCode());

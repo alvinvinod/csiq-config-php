@@ -36,7 +36,7 @@ final class CsiqFlagCatalogTest extends TestCase
     public static function skippedColumns(): iterable
     {
         foreach ([
-            'id', 'practice_id', 'user_id', 'culture_id', 'created_at', 'updated_at', 'created_on',
+            'id', 'cas_tenant_id', 'user_id', 'culture_id', 'created_at', 'updated_at', 'created_on',
             'updated_on', 'created_by', 'last_updated_by', 'last_updated_on', 'vm_salt', 'asterisk_media_ip',
         ] as $column) {
             yield $column => [$column];
@@ -242,7 +242,7 @@ final class CsiqFlagCatalogTest extends TestCase
     public function testDescribeRowDropsSkippedAndEmptyColumns(): void
     {
         $flags = CsiqFlagCatalog::describeRow(
-            ['id' => '1', 'practice_id' => '10018', 'is_memo_enabled' => '1', 'note' => '', 'cultures' => '3'],
+            ['id' => '1', 'cas_tenant_id' => '10018', 'is_memo_enabled' => '1', 'note' => '', 'cultures' => '3'],
             OverrideLevel::PRACTICE,
             ['cultures' => 'int(11)'],
         );
@@ -253,12 +253,12 @@ final class CsiqFlagCatalogTest extends TestCase
 
     public function testLoadCsvPadsShortRowsTrimsLongOnesAndSkipsBlankLines(): void
     {
-        $path = $this->csv("practice_id,is_memo_enabled,note\n10018,1\n\n10019,0,hi,extra\n");
+        $path = $this->csv("cas_tenant_id,is_memo_enabled,note\n10018,1\n\n10019,0,hi,extra\n");
 
         self::assertSame(
             [
-                ['practice_id' => '10018', 'is_memo_enabled' => '1', 'note' => ''],
-                ['practice_id' => '10019', 'is_memo_enabled' => '0', 'note' => 'hi'],
+                ['cas_tenant_id' => '10018', 'is_memo_enabled' => '1', 'note' => ''],
+                ['cas_tenant_id' => '10019', 'is_memo_enabled' => '0', 'note' => 'hi'],
             ],
             CsiqFlagCatalog::loadCsv($path),
         );

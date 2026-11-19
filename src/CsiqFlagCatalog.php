@@ -15,7 +15,7 @@ final class CsiqFlagCatalog
     /** @var list<string> */
     private const SKIP = [
         'id',
-        'practice_id',
+        'cas_tenant_id',
         'user_id',
         'culture_id',
         'created_at',

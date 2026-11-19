@@ -67,7 +67,7 @@ $client = ConfigurationClientFactory::create(
     new ConfigurationClientConfig($host, $insecure, rootCertPath: $rootCertPath),
 );
 
-$accountId = (int) $payload['accountId'];
+$casTenantId = (int) $payload['accountId'];
 $userId = (int) $payload['userId'];
 $locationGroupId = (int) $payload['locationGroupId'];
 $editedBy = (int) $payload['editedBy'];
@@ -76,7 +76,7 @@ $upserts = 0;
 foreach ($payload['values'] as $row) {
     $client->upsert(
         $row['name'],
-        $accountId,
+        $casTenantId,
         $row['value'],
         $editedBy,
         userId: ($row['level'] ?? '') === 'user' ? $userId : null,
@@ -89,7 +89,7 @@ echo "upserted {$upserts} values via gRPC\n";
 $cleared = 0;
 foreach ($payload['cleared'] ?? [] as $name) {
     try {
-        $client->delete($name, $accountId, $editedBy);
+        $client->delete($name, $casTenantId, $editedBy);
         $cleared++;
     } catch (Throwable $e) {
         echo "  skip delete {$name}: {$e->getMessage()}\n";
