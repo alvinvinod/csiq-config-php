@@ -8,8 +8,10 @@ use Carestack\Configuration\RpcConfigurationDetails;
 use Carestack\Configuration\RpcConfigurationDetailsNullable;
 use Carestack\Configuration\RpcUpsertConfigurationRequest;
 use Csiq\Configuration\AttributeType;
+use Csiq\Configuration\ConfigurationException;
 use Csiq\Configuration\Tests\Support\RpcMocks;
 use Google\Protobuf\GPBEmpty;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -72,8 +74,8 @@ final class ConfigurationClientCodecTest extends TestCase
     {
         yield 'boolean true' => [AttributeType::BOOLEAN, 'true', true];
         yield 'boolean false' => [AttributeType::BOOLEAN, 'false', false];
-        yield 'bit 1' => [AttributeType::BIT, '1', true];
-        yield 'bit 0' => [AttributeType::BIT, '0', false];
+        yield 'bit true' => [AttributeType::BIT, 'true', true];
+        yield 'bit false' => [AttributeType::BIT, 'false', false];
         yield 'number' => [AttributeType::NUMBER, '42', 42];
         yield 'string' => [AttributeType::STRING, '"hello"', 'hello'];
         yield 'date' => [AttributeType::DATE, '"2026-10-30T00:00:00"', '2026-10-30T00:00:00'];
@@ -105,5 +107,63 @@ final class ConfigurationClientCodecTest extends TestCase
         [$type, $json] = $this->encoded($value);
 
         self::assertSame($value, $this->decoded($type, $json));
+    }
+
+    /** @return iterable<string, array{int, string}> */
+    public static function corruptStoredValues(): iterable
+    {
+        yield 'number float' => [AttributeType::NUMBER, '1.5'];
+        yield 'number overflow' => [AttributeType::NUMBER, '99999999999999999999'];
+        yield 'boolean string' => [AttributeType::BOOLEAN, '"false"'];
+        yield 'string object' => [AttributeType::STRING, '{"a":1}'];
+        yield 'not json' => [AttributeType::STRING, 'not-json'];
+    }
+
+    #[DataProvider('corruptStoredValues')]
+    public function testBadStoredValuesThrowConfigurationException(int $type, string $json): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('bad value for flag');
+
+        $this->decoded($type, $json);
+    }
+
+    public function testEncodeNanThrowsConfigurationException(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('cannot encode value for flag');
+
+        $this->encoded(NAN);
+    }
+
+    public function testEncodeTypeErrorIsWrappedAsConfigurationException(): void
+    {
+        $value = new class implements \JsonSerializable {
+            public function jsonSerialize(): mixed
+            {
+                throw new \TypeError('nope');
+            }
+        };
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('cannot encode value for flag');
+
+        $this->encoded($value);
+    }
+
+    public function testRejectsIdsOutsideInt32(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('casTenantId out of int32 range');
+
+        $this->client()->isFeatureEnabled('flag', 3_000_000_000);
+    }
+
+    public function testRejectsEditedByOutsideInt32(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('editedByUserId out of int32 range');
+
+        $this->client()->upsert('flag', 1, true, 3_000_000_000);
     }
 }

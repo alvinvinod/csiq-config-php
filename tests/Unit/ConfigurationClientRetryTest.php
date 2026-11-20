@@ -9,6 +9,7 @@ use Csiq\Configuration\ConfigurationClientConfig;
 use Csiq\Configuration\ConfigurationException;
 use Csiq\Configuration\RetryPolicy;
 use Csiq\Configuration\Tests\Support\RpcMocks;
+use Grpc\UnaryCall;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -285,5 +286,51 @@ final class ConfigurationClientRetryTest extends TestCase
 
         self::assertTrue($client->isFeatureEnabled('flag', 1));
         self::assertSame([[LogLevel::WARNING, STATUS_UNAVAILABLE, true], [LogLevel::WARNING, STATUS_OK, false]], $levels);
+    }
+
+    public function testMissingGrpcStatusIsUnknownNotOk(): void
+    {
+        $client = $this->client(self::fastConfig(maxAttempts: 1));
+        $this->rpc->method('GetFeatureToggleValue')->willReturnCallback(function () {
+            $call = $this->createMock(UnaryCall::class);
+            $call->method('wait')->willReturn([new RpcToggleValue(), (object) ['details' => '', 'metadata' => []]]);
+
+            return $call;
+        });
+
+        try {
+            $client->isFeatureEnabled('flag', 1);
+            self::fail('Expected ConfigurationException');
+        } catch (ConfigurationException $e) {
+            self::assertSame(STATUS_UNKNOWN, $e->getCode());
+            self::assertStringContainsString('status missing', $e->getMessage());
+        }
+    }
+
+    public function testDoesNotStartAnAttemptAfterTheDeadline(): void
+    {
+        $client = $this->client(new ConfigurationClientConfig(
+            '127.0.0.1:1',
+            true,
+            20,
+            new RetryPolicy(5, 0, 0, 1.0),
+        ));
+        $this->rpc->method('GetFeatureToggleValue')->willReturnCallback(
+            function ($request, array $metadata, array $options) {
+                $this->timeouts[] = $options['timeout'];
+                usleep(30_000);
+
+                return $this->unaryCall(null, STATUS_UNAVAILABLE, 'slow');
+            },
+        );
+
+        try {
+            $client->isFeatureEnabled('flag', 1);
+            self::fail('Expected ConfigurationException');
+        } catch (ConfigurationException $e) {
+            self::assertContains($e->getCode(), [STATUS_UNAVAILABLE, STATUS_DEADLINE_EXCEEDED]);
+        }
+        self::assertCount(1, $this->timeouts);
+        self::assertGreaterThan(0, $this->timeouts[0]);
     }
 }

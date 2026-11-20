@@ -16,9 +16,9 @@ use PHPUnit\Framework\TestCase;
 use const Grpc\STATUS_UNKNOWN;
 
 /**
- * Live configuration service. Seed first:
+ * Live configuration service. Seed the names in tests/fixtures/integration-seed.json
+ * (SQL / SyncTool), then:
  *
- *   php bin/seed-test-fixtures.php
  *   CONFIG_SERVICE_INTEGRATION=1 vendor/bin/phpunit --testsuite integration
  */
 #[Group('integration')]
@@ -38,7 +38,7 @@ final class ConfigurationClientIntegrationTest extends TestCase
     protected function setUp(): void
     {
         if (getenv('CONFIG_SERVICE_INTEGRATION') !== '1') {
-            self::markTestSkipped('Set CONFIG_SERVICE_INTEGRATION=1 after php bin/seed-test-fixtures.php');
+            self::markTestSkipped('Set CONFIG_SERVICE_INTEGRATION=1 after seeding the service');
         }
 
         $this->fixture = json_decode(

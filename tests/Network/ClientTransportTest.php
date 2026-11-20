@@ -86,7 +86,7 @@ final class ClientTransportTest extends TestCase
             self::fail('Expected ConfigurationException');
         } catch (ConfigurationException $e) {
             self::assertSame(STATUS_DEADLINE_EXCEEDED, $e->getCode());
-            self::assertStringEndsWith('(attempt 1 of 5)', $e->getMessage());
+            self::assertStringEndsWith('(attempt 1 of 3)', $e->getMessage());
         }
 
         $elapsed = (hrtime(true) - $started) / 1e9;

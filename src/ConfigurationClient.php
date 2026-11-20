@@ -16,11 +16,17 @@ use Carestack\Configuration\RpcToggleConfigurationSet;
 use Carestack\Configuration\RpcToggleValue;
 use Carestack\Configuration\RpcTypeValuePair;
 use Carestack\Configuration\RpcUpsertConfigurationRequest;
+use Error;
 use Grpc\UnaryCall;
+use InvalidArgumentException;
+use JsonException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
+use TypeError;
 
+use const Grpc\STATUS_DEADLINE_EXCEEDED;
 use const Grpc\STATUS_OK;
+use const Grpc\STATUS_UNKNOWN;
 
 /**
  * IConfigurationClient over the generated gRPC stub.
@@ -30,6 +36,9 @@ use const Grpc\STATUS_OK;
  */
 final class ConfigurationClient implements IConfigurationClient
 {
+    private const INT32_MIN = -2147483648;
+    private const INT32_MAX = 2147483647;
+
     public function __construct(
         private RpcConfigurationServiceClient $rpc,
         private ConfigurationClientConfig $config,
@@ -93,7 +102,7 @@ final class ConfigurationClient implements IConfigurationClient
             return null;
         }
 
-        return $this->decode($pair);
+        return $this->decode($pair, $name);
     }
 
     /** {@inheritdoc} */
@@ -107,14 +116,8 @@ final class ConfigurationClient implements IConfigurationClient
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): ConfigurationDetails {
         $named = $this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope);
-        /** @var RpcConfigurationDetails|null $response */
+        /** @var RpcConfigurationDetails $response */
         $response = $this->call(fn (array $metadata, array $options) => $this->rpc->GetConfigurationDetails($named, $metadata, $options));
-        if (!$response instanceof RpcConfigurationDetails) {
-            throw new ConfigurationException(sprintf(
-                'Entry not found for %s with provided condition (If this is expected - please use tryGet instead)',
-                $name,
-            ));
-        }
 
         return $this->toDetails($response);
     }
@@ -175,7 +178,7 @@ final class ConfigurationClient implements IConfigurationClient
 
         $configurations = [];
         foreach ($response->getConfigurations() as $key => $pair) {
-            $configurations[(string) $key] = $this->decode($pair);
+            $configurations[(string) $key] = $this->decode($pair, (string) $key);
         }
 
         return new ToggleSet($toggles, $configurations);
@@ -193,14 +196,14 @@ final class ConfigurationClient implements IConfigurationClient
         ?int $attributeArea = null,
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): void {
-        [$type, $json] = $this->encode($value);
+        [$type, $json] = $this->encode($value, $name);
         $pair = new RpcTypeValuePair();
         $pair->setType($type);
         $pair->setValueUnwrapped($json);
 
         $request = new RpcUpsertConfigurationRequest();
         $request->setTypeValuePair($pair);
-        $request->setEditedByUserId($editedByUserId);
+        $request->setEditedByUserId(self::int32($editedByUserId, 'editedByUserId'));
         $request->setCondition($this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
 
         $this->call(fn (array $metadata, array $options) => $this->rpc->UpsertConfiguration($request, $metadata, $options));
@@ -218,7 +221,7 @@ final class ConfigurationClient implements IConfigurationClient
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): void {
         $request = new RpcDeleteConfigurationRequest();
-        $request->setDeletedByUserId($deletedByUserId);
+        $request->setDeletedByUserId(self::int32($deletedByUserId, 'deletedByUserId'));
         $request->setCondition($this->named($name, $casTenantId, $userId, $locationId, $locationGroupId, $attributeArea, $configDefinitionScope));
 
         $this->call(fn (array $metadata, array $options) => $this->rpc->DeleteConfiguration($request, $metadata, $options));
@@ -249,44 +252,49 @@ final class ConfigurationClient implements IConfigurationClient
         int $configDefinitionScope = ConfigDefinitionScope::SERVER,
     ): RpcConfigurationCondition {
         $condition = new RpcConfigurationCondition();
-        $condition->setAccountIdUnwrapped($casTenantId);
+        $condition->setAccountIdUnwrapped(self::int32($casTenantId, 'casTenantId'));
         $condition->setConfigDefinitionScope($configDefinitionScope);
         if ($userId !== null) {
-            $condition->setUserIdUnwrapped($userId);
+            $condition->setUserIdUnwrapped(self::int32($userId, 'userId'));
         }
         if ($locationId !== null) {
-            $condition->setLocationIdUnwrapped($locationId);
+            $condition->setLocationIdUnwrapped(self::int32($locationId, 'locationId'));
         }
         if ($locationGroupId !== null) {
-            $condition->setLocationGroupIdUnwrapped($locationGroupId);
+            $condition->setLocationGroupIdUnwrapped(self::int32($locationGroupId, 'locationGroupId'));
         }
         if ($attributeArea !== null) {
-            $condition->setAttributeAreaUnwrapped($attributeArea);
+            $condition->setAttributeAreaUnwrapped(self::int32($attributeArea, 'attributeArea'));
         }
 
         return $condition;
     }
 
     /** @return array{0: int, 1: string} */
-    private function encode(mixed $value): array
+    private function encode(mixed $value, string $name): array
     {
-        return match (true) {
-            is_bool($value) => [AttributeType::BOOLEAN, json_encode($value, JSON_THROW_ON_ERROR)],
-            is_int($value) => [AttributeType::NUMBER, json_encode($value, JSON_THROW_ON_ERROR)],
-            is_string($value) => [AttributeType::STRING, json_encode($value, JSON_THROW_ON_ERROR)],
-            default => [AttributeType::JSON, json_encode($value, JSON_THROW_ON_ERROR)],
-        };
+        try {
+            return match (true) {
+                is_bool($value) => [AttributeType::BOOLEAN, json_encode($value, JSON_THROW_ON_ERROR)],
+                is_int($value) => [AttributeType::NUMBER, json_encode($value, JSON_THROW_ON_ERROR)],
+                is_string($value) => [AttributeType::STRING, json_encode($value, JSON_THROW_ON_ERROR)],
+                default => [AttributeType::JSON, json_encode($value, JSON_THROW_ON_ERROR)],
+            };
+        } catch (JsonException|TypeError|Error $e) {
+            throw new ConfigurationException(sprintf('cannot encode value for %s', $name), 0, $e);
+        }
     }
 
     private function toDetails(RpcConfigurationDetails $rpc): ConfigurationDetails
     {
         $pair = $rpc->getTypeValuePair();
+        $name = $rpc->getName();
 
         return new ConfigurationDetails(
-            name: $rpc->getName(),
+            name: $name,
             priority: $rpc->getPriority(),
             type: $rpc->getType(),
-            value: $pair === null ? null : $this->decode($pair),
+            value: $pair === null ? null : $this->decode($pair, $name),
             accountId: $rpc->getAccountIdUnwrapped(),
             userId: $rpc->getUserIdUnwrapped(),
             locationGroupId: $rpc->getLocationGroupIdUnwrapped(),
@@ -294,20 +302,63 @@ final class ConfigurationClient implements IConfigurationClient
         );
     }
 
-    private function decode(RpcTypeValuePair $pair): mixed
+    private function decode(RpcTypeValuePair $pair, string $name): mixed
     {
         $json = $pair->getValueUnwrapped();
         if ($json === null || $json === '') {
             return null;
         }
 
-        return match ($pair->getType()) {
-            AttributeType::BOOLEAN, AttributeType::BIT => (bool) json_decode($json, true, 512, JSON_THROW_ON_ERROR),
-            AttributeType::NUMBER => (int) json_decode($json, true, 512, JSON_THROW_ON_ERROR),
-            AttributeType::STRING => (string) json_decode($json, true, 512, JSON_THROW_ON_ERROR),
-            AttributeType::DATE => (string) json_decode($json, false, 512, JSON_THROW_ON_ERROR),
-            default => json_decode($json, true, 512, JSON_THROW_ON_ERROR),
-        };
+        try {
+            $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+
+            return match ($pair->getType()) {
+                AttributeType::BOOLEAN, AttributeType::BIT => self::expectBool($decoded, $name),
+                AttributeType::NUMBER => self::expectInt32Number($decoded, $name),
+                AttributeType::STRING, AttributeType::DATE => self::expectString($decoded, $name),
+                default => $decoded,
+            };
+        } catch (ConfigurationException $e) {
+            throw $e;
+        } catch (JsonException|TypeError|Error $e) {
+            throw new ConfigurationException(sprintf('bad value for %s', $name), 0, $e);
+        }
+    }
+
+    private static function expectBool(mixed $decoded, string $name): bool
+    {
+        if (!is_bool($decoded)) {
+            throw new ConfigurationException(sprintf('bad value for %s', $name));
+        }
+
+        return $decoded;
+    }
+
+    private static function expectInt32Number(mixed $decoded, string $name): int
+    {
+        if (!is_int($decoded) || $decoded < self::INT32_MIN || $decoded > self::INT32_MAX) {
+            throw new ConfigurationException(sprintf('bad value for %s', $name));
+        }
+
+        return $decoded;
+    }
+
+    private static function expectString(mixed $decoded, string $name): string
+    {
+        if (!is_string($decoded)) {
+            throw new ConfigurationException(sprintf('bad value for %s', $name));
+        }
+
+        return $decoded;
+    }
+
+    private static function int32(int $id, string $field): int
+    {
+        if ($id < self::INT32_MIN || $id > self::INT32_MAX) {
+            throw new InvalidArgumentException(sprintf('%s out of int32 range: %d', $field, $id));
+        }
+
+        return $id;
     }
 
     /**
@@ -327,8 +378,20 @@ final class ConfigurationClient implements IConfigurationClient
 
         for ($attempt = 1; ; $attempt++) {
             $remainingUs = intdiv($deadlineNs - hrtime(true), 1000);
-            [$response, $status] = $start($metadata, ['timeout' => max($remainingUs, 1)])->wait();
-            $code = (int) ($status->code ?? STATUS_OK);
+            if ($remainingUs <= 0) {
+                throw new ConfigurationException(
+                    sprintf('gRPC %d: deadline exceeded (attempt %d of %d)', STATUS_DEADLINE_EXCEEDED, $attempt, $retry->maxAttempts),
+                    STATUS_DEADLINE_EXCEEDED,
+                );
+            }
+            [$response, $status] = $start($metadata, ['timeout' => $remainingUs])->wait();
+            if (!is_object($status) || !isset($status->code)) {
+                throw new ConfigurationException(
+                    sprintf('gRPC %d: status missing (attempt %d of %d)', STATUS_UNKNOWN, $attempt, $retry->maxAttempts),
+                    STATUS_UNKNOWN,
+                );
+            }
+            $code = (int) $status->code;
             if ($code === STATUS_OK) {
                 if ($attempt > 1) {
                     $this->logRpc(LogLevel::WARNING, $attempt, $retry->maxAttempts, $code, '', $startedNs, false);
