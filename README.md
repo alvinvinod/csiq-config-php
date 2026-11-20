@@ -87,6 +87,8 @@ Local `dotnet run` gRPC is HTTPS HTTP/2 on **7154**. Port **5295** is HTTP/1.1 a
 
 Retries: `INTERNAL`, `UNKNOWN`, `UNAVAILABLE`; 3 attempts; 250ms equal jitter. `TIMEOUT_MS` covers attempts and backoff. There is no circuit breaker (PHP-FPM workers cannot share breaker state).
 
+Scripts talking to a non-loopback host need `--allow-remote` or `CONFIG_SERVICE_ALLOW_REMOTE=true`. Laravel apps: the adapter rejects loopback URIs and `insecure=true` outside `local` / `testing`.
+
 ## Tests and smoke
 
 ```bash
@@ -97,5 +99,3 @@ php bin/smoke.php      # live HTTPS localhost:7154; exports the ASP.NET cert unl
 `SMOKE_TENANT_ID`, `SMOKE_FLAG`, `SMOKE_WRITE=true` match the Node smoke.
 
 In tests, bind a fake: `Csiq\Configuration\Testing\FakeConfigurationClient`.
-
-Port/fetch scripts (`bin/port-csiq-flags.php`, `bin/fetch-csiq-flags.php`) copy CSIQ DB/CSV flags into CareStack. See those files' headers for flags.

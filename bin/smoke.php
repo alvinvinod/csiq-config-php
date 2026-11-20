@@ -17,6 +17,7 @@ declare(strict_types=1);
  * Optional: SMOKE_TENANT_ID (10001), SMOKE_FLAG (first toggle from getAll, else EnableFoo),
  * SMOKE_WRITE=true to flip and restore a feature toggle.
  * CONFIG_SERVICE_ROOT_CERT_PATH overrides the exported ASP.NET HTTPS cert.
+ * Non-loopback CONFIG_SERVICE_URI needs CONFIG_SERVICE_ALLOW_REMOTE=true.
  */
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -26,6 +27,7 @@ use Csiq\Configuration\ConfigurationClientFactory;
 use Csiq\Configuration\ConfigurationException;
 use Csiq\Configuration\IConfigurationClient;
 use Csiq\Configuration\OverrideLevel;
+use Csiq\Configuration\ProductionGuard;
 
 final class ConfigurationSmoke
 {
@@ -171,6 +173,7 @@ function show(mixed $value): string
 
 $host = getenv('CONFIG_SERVICE_URI') ?: 'localhost:7154';
 $insecure = truthy(getenv('CONFIG_SERVICE_INSECURE'));
+ProductionGuard::assertRemoteAllowed($host, $insecure, ProductionGuard::allowRemoteRequested());
 $rootCertPath = getenv('CONFIG_SERVICE_ROOT_CERT_PATH') ?: ($insecure ? null : writeServerCert($host));
 $casTenantId = intEnv('SMOKE_TENANT_ID', 10001);
 $write = truthy(getenv('SMOKE_WRITE'));

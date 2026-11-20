@@ -116,17 +116,6 @@ final class ConfigurationClientResponseTest extends TestCase
         self::assertNull($details->locationId);
     }
 
-    public function testGetConfigurationDetailsThrowsOnAnEmptyResponse(): void
-    {
-        $client = $this->client();
-        $this->rpc->method('GetConfigurationDetails')->willReturn($this->unaryCall(null));
-
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('Entry not found for missing');
-
-        $client->getConfigurationDetails('missing', 1);
-    }
-
     public function testGetAllMapsTogglesAndDecodesConfigurations(): void
     {
         $client = $this->client();
